@@ -4,6 +4,8 @@ const http = require("http");
 const { Server } = require("socket.io");
 const { forecast, stepsToBreach } = require("./forecast");
 const { planEvacuation, distanceKm } = require("./evacuation");
+const { openDb } = require("./db");
+const { randomUUID } = require("node:crypto");
 
 const app = express();
 app.use(cors());
@@ -34,7 +36,9 @@ const SHELTERS = [
 
 const TEAMS = ["NDRF Battalion 4", "TN SDRF Unit 2", "GCC Rapid Response", "Fire & Rescue Services", "Chennai Traffic Police"];
 
-let thresholds = { warning: 40, danger: 70 };
+const db = openDb();
+const DEFAULT_THRESHOLDS = { warning: 40, danger: 70 };
+let thresholds = db.getSetting("thresholds", DEFAULT_THRESHOLDS);
 
 function riskLevel(level) {
   if (level >= thresholds.danger) return "danger";
@@ -60,9 +64,16 @@ function nearestZone(lat, lng) {
 
 const HISTORY_CAP = 200;
 const history = Object.fromEntries(LOCATIONS.map((l) => [l.id, []]));
-let incidents = [];
-let citizenReports = [];
-let broadcasts = [];
+const INCIDENTS_CAP = 100;
+const REPORTS_CAP = 500;
+const BROADCASTS_CAP = 100;
+let incidents = db.load("incidents", INCIDENTS_CAP);
+let citizenReports = db.load("reports", REPORTS_CAP);
+let broadcasts = db.load("broadcasts", BROADCASTS_CAP);
+
+const saveIncident = (inc) => db.save("incidents", inc, inc.startTs);
+const saveReport = (r) => db.save("reports", r, r.ts);
+const saveBroadcast = (b) => db.save("broadcasts", b, b.ts);
 let t = 0;
 
 function currentSnapshot() {
@@ -86,9 +97,10 @@ function currentSnapshot() {
 function addBroadcast({ zoneId, severity, message, channels, source }) {
   const zone = LOCATIONS.find((l) => l.id === zoneId);
   const recipients = zone ? zone.population : LOCATIONS.reduce((s, l) => s + l.population, 0);
-  const b = { id: Date.now() + Math.random(), zoneId, zoneName: zone ? zone.name : "All zones", severity, message, channels, source, recipients, ts: Date.now() };
+  const b = { id: randomUUID(), zoneId, zoneName: zone ? zone.name : "All zones", severity, message, channels, source, recipients, ts: Date.now() };
   broadcasts.unshift(b);
-  broadcasts = broadcasts.slice(0, 100);
+  broadcasts = broadcasts.slice(0, BROADCASTS_CAP);
+  saveBroadcast(b);
   io.emit("broadcast", b);
   return b;
 }
@@ -104,14 +116,16 @@ function updateIncidents(payload) {
     const open = incidents.find((i) => i.zoneId === p.id && i.status !== "cleared");
     if (p.risk === "danger") {
       if (!open && loc.dangerTicks >= OPEN_AFTER_TICKS) {
-        const inc = { id: Date.now() + Math.random(), zoneId: p.id, zoneName: p.name, startTs: p.ts, endTs: null, peakLevel: p.level, currentLevel: p.level, status: "active", team: null, log: [{ ts: p.ts, text: `Danger threshold crossed at ${p.level}%` }] };
+        const inc = { id: randomUUID(), zoneId: p.id, zoneName: p.name, startTs: p.ts, endTs: null, peakLevel: p.level, currentLevel: p.level, status: "active", team: null, log: [{ ts: p.ts, text: `Danger threshold crossed at ${p.level}%` }] };
         incidents.unshift(inc);
-        incidents = incidents.slice(0, 100);
+        incidents = incidents.slice(0, INCIDENTS_CAP);
+        saveIncident(inc);
         io.emit("incident-opened", inc);
         addBroadcast({ zoneId: p.id, severity: "danger", message: `FLOOD WARNING: Water levels critical in ${p.name}. Move to higher ground or the nearest relief shelter.`, channels: ["sms", "push"], source: "auto" });
       } else if (open) {
         open.currentLevel = p.level;
         if (p.level > open.peakLevel) open.peakLevel = p.level;
+        saveIncident(open);
         io.emit("incident-updated", open);
       }
     } else if (open && p.level < thresholds.danger - CLEAR_MARGIN) {
@@ -119,6 +133,7 @@ function updateIncidents(payload) {
       open.endTs = p.ts;
       open.currentLevel = p.level;
       open.log.push({ ts: p.ts, text: `Level receded to ${p.level}% — incident auto-cleared` });
+      saveIncident(open);
       io.emit("incident-updated", open);
     }
   });
@@ -168,6 +183,7 @@ app.put("/api/thresholds", (req, res) => {
   const { warning, danger } = req.body;
   if (typeof warning === "number" && typeof danger === "number" && warning < danger) {
     thresholds = { warning, danger };
+    db.setSetting("thresholds", thresholds);
     io.emit("thresholds-updated", thresholds);
   }
   res.json(thresholds);
@@ -190,7 +206,7 @@ app.post("/api/citizen-report", (req, res) => {
   }
   const zone = nearestZone(lat, lng);
   const report = {
-    id: Date.now(),
+    id: randomUUID(),
     lat,
     lng,
     category: CATEGORIES.has(category) ? category : "other",
@@ -203,20 +219,23 @@ app.post("/api/citizen-report", (req, res) => {
     status: "open",
   };
   citizenReports.unshift(report);
+  citizenReports = citizenReports.slice(0, REPORTS_CAP);
+  saveReport(report);
   io.emit("citizen-report", report);
   res.json(report);
 });
 
 app.patch("/api/citizen-report/:id", (req, res) => {
-  const report = citizenReports.find((r) => r.id === Number(req.params.id));
+  const report = citizenReports.find((r) => r.id === req.params.id);
   if (!report) return res.status(404).json({ error: "not found" });
   if (["open", "in_progress", "resolved"].includes(req.body.status)) report.status = req.body.status;
+  saveReport(report);
   io.emit("report-updated", report);
   res.json(report);
 });
 
 app.patch("/api/incidents/:id", (req, res) => {
-  const inc = incidents.find((i) => String(i.id) === req.params.id);
+  const inc = incidents.find((i) => i.id === req.params.id);
   if (!inc) return res.status(404).json({ error: "not found" });
   const { team, note } = req.body;
   if (team && TEAMS.includes(team)) {
@@ -225,6 +244,7 @@ app.patch("/api/incidents/:id", (req, res) => {
     inc.log.push({ ts: Date.now(), text: `${team} dispatched` });
   }
   if (note && String(note).trim()) inc.log.push({ ts: Date.now(), text: String(note).slice(0, 200) });
+  saveIncident(inc);
   io.emit("incident-updated", inc);
   res.json(inc);
 });
@@ -235,6 +255,18 @@ app.post("/api/broadcasts", (req, res) => {
   const valid = ["sms", "push", "siren"].filter((c) => Array.isArray(channels) && channels.includes(c));
   if (valid.length === 0) return res.status(400).json({ error: "pick at least one channel" });
   res.json(addBroadcast({ zoneId: zoneId || "all", severity: severity || "info", message: String(message).slice(0, 300), channels: valid, source: "manual" }));
+});
+
+// wipes reports, incidents and broadcasts (they persist across restarts now, so test runs pile up)
+app.post("/api/admin/clear-data", (req, res) => {
+  db.clearRecords();
+  incidents = [];
+  citizenReports = [];
+  broadcasts = [];
+  thresholds = { ...DEFAULT_THRESHOLDS };
+  db.setSetting("thresholds", thresholds);
+  io.emit("data-cleared", { thresholds });
+  res.json({ ok: true });
 });
 
 const OSRM_URL = "https://router.project-osrm.org/route/v1/driving";

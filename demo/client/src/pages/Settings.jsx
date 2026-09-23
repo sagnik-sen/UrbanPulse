@@ -84,11 +84,46 @@ function StormSimulator() {
   );
 }
 
+function DemoData() {
+  const { clearDemoData, pushToast, reports, incidents, broadcasts } = useFloodData();
+  const [confirming, setConfirming] = useState(false);
+
+  const clear = async () => {
+    await clearDemoData();
+    setConfirming(false);
+    pushToast({ kind: "info", title: "Demo data cleared", text: "Reports, incidents and broadcasts removed; thresholds reset" });
+  };
+
+  return (
+    <div className="panel">
+      <div className="panel-head"><h2>Demo Data</h2><span className="muted small">Saved in SQLite</span></div>
+      <p className="muted small" style={{ marginBottom: 14 }}>
+        Everything below survives server restarts. Clear it before a presentation to start from a clean slate.
+      </p>
+      <div className="data-counts">
+        <div><span className="route-num">{reports.length}</span> reports</div>
+        <div><span className="route-num">{incidents.length}</span> incidents</div>
+        <div><span className="route-num">{broadcasts.length}</span> broadcasts</div>
+      </div>
+      {confirming ? (
+        <div className="confirm-row" role="alertdialog" aria-label="Confirm clearing demo data">
+          <span className="small">Permanently delete all of this?</span>
+          <button className="btn danger" onClick={clear}>Yes, clear everything</button>
+          <button className="btn ghost" onClick={() => setConfirming(false)}>Cancel</button>
+        </div>
+      ) : (
+        <div className="btn-row"><button className="btn ghost" onClick={() => setConfirming(true)}>Clear demo data…</button></div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   return (
     <section className="grid-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
       <ThresholdSettings />
       <StormSimulator />
+      <DemoData />
     </section>
   );
 }

@@ -319,3 +319,6 @@ a.feed-item:hover { background: #1c1c1a; }
   .modal-backdrop { align-items: flex-end; padding: 0; }
   .modal { border-radius: 16px 16px 0 0; max-height: 92vh; }
 }
+
+.data-counts { display: flex; gap: 20px; font-size: 12px; color: #c3c2b7; }
+.confirm-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 20px; }

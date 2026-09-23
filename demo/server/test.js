@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert");
 const { forecast, stepsToBreach } = require("./forecast");
 const { planEvacuation, routeExposure } = require("./evacuation");
+const { openDb } = require("./db");
 
 test("rising series projects upward and breaches danger", () => {
   const series = Array.from({ length: 20 }, (_, i) => 30 + i * 2);
@@ -70,4 +71,17 @@ test("planner avoids a shelter inside an active danger zone when another is open
   const fetchRoute = async ([a, b]) => [{ coords: [[a.lat, a.lng], [b.lat, b.lng]], distanceKm: 1, durationMin: b.id === "dry" ? 15 : 2 }];
   const plan = await planEvacuation({ from, shelters: [inFlood, dry], zones: [zone], fetchRoute });
   assert.equal(plan.shelter.id, "dry");
+});
+
+test("records round-trip through SQLite, newest first, and upserts by id", () => {
+  const db = openDb(":memory:");
+  db.save("reports", { id: "a", note: "old" }, 1);
+  db.save("reports", { id: "b", note: "new" }, 2);
+  db.save("reports", { id: "a", note: "edited" }, 1);
+  assert.deepEqual(db.load("reports", 10).map((r) => r.note), ["new", "edited"]);
+  db.setSetting("thresholds", { warning: 30, danger: 60 });
+  assert.deepEqual(db.getSetting("thresholds", null), { warning: 30, danger: 60 });
+  db.clearRecords();
+  assert.equal(db.load("reports", 10).length, 0);
+  assert.throws(() => db.load("users; DROP TABLE users", 1));
 });

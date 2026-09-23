@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { io } from "socket.io-client";
 
-export const SERVER_URL = "http://localhost:4000";
+// same-origin: Vite proxies /api and /socket.io to the backend in dev
+const SERVER_URL = "";
 const FloodDataContext = createContext(null);
 
 const fmtTime = (ts) => new Date(ts).toLocaleTimeString();
@@ -66,7 +67,7 @@ export function FloodDataProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const socket = io(SERVER_URL);
+    const socket = io();
     socket.on("connect", () => setConnected(true));
     socket.on("disconnect", () => setConnected(false));
 
@@ -101,6 +102,12 @@ export function FloodDataProvider({ children }) {
     socket.on("broadcast", upsert(setBroadcasts));
     socket.on("shelters-update", setShelters);
     socket.on("thresholds-updated", setThresholds);
+    socket.on("data-cleared", ({ thresholds: t }) => {
+      setIncidents([]);
+      setReports([]);
+      setBroadcasts([]);
+      setThresholds(t);
+    });
 
     return () => socket.disconnect();
   }, [pushToast]);
@@ -116,6 +123,7 @@ export function FloodDataProvider({ children }) {
     triggerStorm: (zoneId, intensity) => api("/api/simulate/storm", "POST", { zoneId, intensity }),
     updateThresholds: (next) => api("/api/thresholds", "PUT", next).then(setThresholds),
     planEvacuation,
+    clearDemoData: () => api("/api/admin/clear-data", "POST", {}),
   };
 
   return <FloodDataContext.Provider value={value}>{children}</FloodDataContext.Provider>;

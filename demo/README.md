@@ -2,8 +2,11 @@
 
 Multi-page admin console for the status review. The sensor feed is simulated
 (stands in for IoT hardware) and the forecast is a rule-based extrapolation
-(stands in for the LSTM in the deck). All state is in memory and resets when
-the server restarts.
+(stands in for the LSTM in the deck). Reports, incidents, broadcasts and
+thresholds are saved in SQLite (`demo/server/data/urbanpulse.db`) and survive
+restarts; clear them from Settings → Demo Data before a presentation.
+
+Requires Node.js 22.5 or newer (uses the built-in `node:sqlite` module).
 
 ## Run
 
@@ -58,4 +61,4 @@ Covers the forecast model (breach detection, post-storm recession, band width) a
 - Routing: OSRM (public server) returns road routes; the planner adds detours around flooded zones, scores every candidate by drive time plus km through floodwater, and avoids shelters inside active floods. Falls back to a straight line if OSRM is unreachable. Needs internet, same as the map tiles
 - Incidents use hysteresis (clear only 10 points below danger) and a 4-second debounce so sensor noise doesn't spam alerts
 - Thresholds are live and global: changing them re-classifies every zone in real time
-- No auth or persistence yet. Both are deliberate prototype scope.
+- Persistence: Node's built-in SQLite, write-through from the in-memory working set, no native dependencies
