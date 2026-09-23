@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useFloodData } from "../FloodDataContext";
+import { useAuth } from "../AuthContext";
 import { timeAgo, formatCount } from "../constants";
 
 const TEMPLATES = [
@@ -14,6 +15,7 @@ const CHANNEL_LABEL = { sms: "SMS", push: "App push", siren: "Sirens" };
 
 export default function Broadcasts() {
   const { broadcasts, locations, sendBroadcast, pushToast } = useFloodData();
+  const { can } = useAuth();
   const [zoneId, setZoneId] = useState("all");
   const [severity, setSeverity] = useState("warning");
   const [channels, setChannels] = useState(["sms", "push"]);
@@ -46,6 +48,12 @@ export default function Broadcasts() {
 
   return (
     <section className="grid-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
+      {!can.manage ? (
+        <div className="panel">
+          <div className="panel-head"><h2>Compose Public Alert</h2></div>
+          <p className="muted small">Only control-room admins can send public alerts. Automated alerts still go out when an incident opens, and you can follow everything in the history.</p>
+        </div>
+      ) : (
       <form className="panel" onSubmit={send}>
         <div className="panel-head"><h2>Compose Public Alert</h2></div>
 
@@ -93,6 +101,7 @@ export default function Broadcasts() {
         {error && <div className="form-error" role="alert">{error}</div>}
         <button className="btn" type="submit" disabled={sending}>{sending ? "Sending…" : "Send broadcast"}</button>
       </form>
+      )}
 
       <div className="panel">
         <div className="panel-head">

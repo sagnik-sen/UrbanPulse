@@ -322,3 +322,16 @@ a.feed-item:hover { background: #1c1c1a; }
 
 .data-counts { display: flex; gap: 20px; font-size: 12px; color: #c3c2b7; }
 .confirm-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+
+/* Auth */
+.user-box { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid #2c2c2a; border-radius: 10px; margin-bottom: 12px; }
+.user-avatar { width: 30px; height: 30px; border-radius: 50%; background: #16233a; color: #7fb2f0; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+.user-meta { flex: 1; min-width: 0; }
+.user-name { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.login-card { width: 100%; max-width: 400px; background: #1a1a19; border: 1px solid #2c2c2a; border-radius: 16px; padding: 28px; }
+.login-title { font-size: 20px; margin: 0 0 20px; }
+.demo-accounts { margin-top: 22px; padding-top: 18px; border-top: 1px solid #2c2c2a; display: flex; flex-direction: column; gap: 6px; }
+.demo-account { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; background: #141414; border: 1px solid #2c2c2a; border-radius: 8px; padding: 8px 10px; color: #fff; font-size: 12.5px; cursor: pointer; }
+.demo-account:hover { border-color: #3987e5; }
+.demo-account:focus-visible { outline: 2px solid #3987e5; outline-offset: 2px; }

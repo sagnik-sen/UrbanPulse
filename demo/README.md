@@ -18,7 +18,17 @@ cd demo/server && npm install && npm start
 cd demo/client && npm install && npm run dev
 ```
 
-Open http://localhost:5173
+Open http://localhost:5173 and sign in. The citizen app at
+http://localhost:5173/citizen needs no login.
+
+| Account | Password | Role |
+|---|---|---|
+| `admin` | `admin123` | Everything: thresholds, Storm Simulator, broadcasts, clearing demo data |
+| `officer` | `officer123` | Dispatch teams, add incident notes, update report status |
+| `viewer` | `viewer123` | Read-only monitoring |
+
+Override the demo passwords with `UP_ADMIN_PASSWORD`, `UP_OFFICER_PASSWORD` and
+`UP_VIEWER_PASSWORD` before the first start (accounts are created once, in the database).
 
 ## Pages
 
@@ -34,6 +44,7 @@ Open http://localhost:5173
 
 ## Demo script (about 3 minutes)
 
+0. **Sign in as admin** (click the demo account on the login page). Clear old data in Settings → Demo Data if needed.
 1. **Overview**: "This is the GCC control room view: six sensor zones, live levels, shelters."
 2. **Settings → Storm Simulator**: target Velachery, intensity 50, **Trigger storm**.
 3. Within ~5s: a toast appears, the Incidents badge turns red, and the Overview shows the "no team assigned" banner.
@@ -61,4 +72,5 @@ Covers the forecast model (breach detection, post-storm recession, band width) a
 - Routing: OSRM (public server) returns road routes; the planner adds detours around flooded zones, scores every candidate by drive time plus km through floodwater, and avoids shelters inside active floods. Falls back to a straight line if OSRM is unreachable. Needs internet, same as the map tiles
 - Incidents use hysteresis (clear only 10 points below danger) and a 4-second debounce so sensor noise doesn't spam alerts
 - Thresholds are live and global: changing them re-classifies every zone in real time
+- Security: staff sign-in with scrypt-hashed passwords, database-backed sessions in an httpOnly cookie, lockout after 10 failed attempts. Roles are enforced on the server (the UI just hides what you can't use). The citizen app reads a separate public endpoint with no reporter names or dispatch details
 - Persistence: Node's built-in SQLite, write-through from the in-memory working set, no native dependencies

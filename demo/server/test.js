@@ -3,6 +3,7 @@ const assert = require("node:assert");
 const { forecast, stepsToBreach } = require("./forecast");
 const { planEvacuation, routeExposure } = require("./evacuation");
 const { openDb } = require("./db");
+const { createAuth, hashPassword, verifyPassword, requireRole } = require("./auth");
 
 test("rising series projects upward and breaches danger", () => {
   const series = Array.from({ length: 20 }, (_, i) => 30 + i * 2);
@@ -84,4 +85,43 @@ test("records round-trip through SQLite, newest first, and upserts by id", () =>
   db.clearRecords();
   assert.equal(db.load("reports", 10).length, 0);
   assert.throws(() => db.load("users; DROP TABLE users", 1));
+});
+
+test("passwords are salted scrypt hashes and verify correctly", () => {
+  const a = hashPassword("secret");
+  assert.notEqual(a, hashPassword("secret"), "salted: same password, different hash");
+  assert.ok(verifyPassword("secret", a));
+  assert.ok(!verifyPassword("wrong", a));
+  assert.ok(!verifyPassword("secret", "garbage"));
+});
+
+test("login issues a session cookie that resolves back to the user; logout ends it", () => {
+  const auth = createAuth(openDb(":memory:").raw);
+  assert.equal(auth.login("admin", "nope").status, 401);
+  assert.equal(auth.login("ghost", "admin123").error, "Invalid username or password");
+  const ok = auth.login("Admin", "admin123");
+  assert.equal(ok.user.role, "admin");
+  assert.ok(!("password_hash" in ok.user));
+  const cookie = `other=1; up_session=${ok.token}`;
+  assert.equal(auth.userFromCookieHeader(cookie).username, "admin");
+  auth.logout(cookie);
+  assert.equal(auth.userFromCookieHeader(cookie), null);
+});
+
+test("repeated failed logins lock the account", () => {
+  const auth = createAuth(openDb(":memory:").raw);
+  for (let i = 0; i < 10; i++) auth.login("viewer", "bad");
+  assert.equal(auth.login("viewer", "viewer123").status, 429);
+});
+
+test("requireRole answers 401 when signed out and 403 for the wrong role", () => {
+  const run = (user, roles) => {
+    let code = 200;
+    const res = { status(c) { code = c; return { json() {} }; } };
+    requireRole(...roles)({ user }, res, () => {});
+    return code;
+  };
+  assert.equal(run(null, ["admin"]), 401);
+  assert.equal(run({ role: "viewer" }, ["admin", "officer"]), 403);
+  assert.equal(run({ role: "officer" }, ["admin", "officer"]), 200);
 });

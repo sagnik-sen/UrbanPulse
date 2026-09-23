@@ -5,9 +5,11 @@ import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
 import { useFloodData } from "../FloodDataContext";
 import { STATUS, ZONE_COLOR, CATEGORIES, timeAgo, formatCount } from "../constants";
 import MapReady from "../MapReady";
+import { useAuth } from "../AuthContext";
 
 export default function Overview() {
   const { locations, trend, incidents, reports, broadcasts, shelters } = useFloodData();
+  const { can } = useAuth();
 
   const counts = useMemo(() => ({
     safe: locations.filter((l) => l.risk === "safe").length,
@@ -30,7 +32,7 @@ export default function Overview() {
 
   return (
     <>
-      {unassigned > 0 && (
+      {unassigned > 0 && can.respond && (
         <Link to="/incidents" className="action-banner">
           ⚠ {unassigned} active incident{unassigned > 1 ? "s" : ""} with no response team assigned. Dispatch now →
         </Link>

@@ -1,11 +1,12 @@
 import { Fragment, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useFloodData } from "../FloodDataContext";
+import { useAuth } from "../AuthContext";
 import { INCIDENT_STATUS, duration, downloadCsv } from "../constants";
 
 const TABS = [["all", "All"], ["active", "Active"], ["responding", "Responding"], ["cleared", "Cleared"]];
 
-function IncidentRow({ inc, teams, updateIncident }) {
+function IncidentRow({ inc, teams, updateIncident, canRespond }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const s = INCIDENT_STATUS[inc.status];
@@ -26,7 +27,7 @@ function IncidentRow({ inc, teams, updateIncident }) {
         <td className="mono">{duration(inc.startTs, inc.endTs)}</td>
         <td className="mono">{inc.peakLevel}%</td>
         <td onClick={(e) => e.stopPropagation()}>
-          {inc.status === "cleared" ? (
+          {inc.status === "cleared" || !canRespond ? (
             <span className="muted small">{inc.team ?? "—"}</span>
           ) : (
             <select className="select" value={inc.team ?? ""} onChange={(e) => e.target.value && updateIncident(inc.id, { team: e.target.value })}>
@@ -47,10 +48,10 @@ function IncidentRow({ inc, teams, updateIncident }) {
                 </div>
               ))}
             </div>
-            <form className="inline-form" onSubmit={addNote}>
+            {canRespond && <form className="inline-form" onSubmit={addNote}>
               <input className="input" placeholder="Add field note (e.g. 'Pumps deployed at 2nd Main Rd')" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} />
               <button className="btn" type="submit" disabled={!note.trim()}>Add note</button>
-            </form>
+            </form>}
           </td>
         </tr>
       )}
@@ -60,6 +61,7 @@ function IncidentRow({ inc, teams, updateIncident }) {
 
 export default function Incidents() {
   const { incidents, locations, teams, updateIncident } = useFloodData();
+  const { can } = useAuth();
   const [tab, setTab] = useState("all");
   const [zone, setZone] = useState("all");
 
@@ -102,7 +104,7 @@ export default function Incidents() {
             <tr><th>Zone</th><th>Status</th><th>Started</th><th>Duration</th><th>Peak</th><th>Response team</th></tr>
           </thead>
           <tbody>
-            {filtered.map((inc) => <IncidentRow key={inc.id} inc={inc} teams={teams} updateIncident={updateIncident} />)}
+            {filtered.map((inc) => <IncidentRow key={inc.id} inc={inc} teams={teams} updateIncident={updateIncident} canRespond={can.respond} />)}
           </tbody>
         </table>
       )}

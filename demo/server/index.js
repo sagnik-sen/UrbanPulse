@@ -1,18 +1,18 @@
 const express = require("express");
-const cors = require("cors");
 const http = require("http");
 const { Server } = require("socket.io");
 const { forecast, stepsToBreach } = require("./forecast");
 const { planEvacuation, distanceKm } = require("./evacuation");
 const { openDb } = require("./db");
 const { randomUUID } = require("node:crypto");
+const { createAuth, attachUser, requireRole } = require("./auth");
 
+// served same-origin behind the Vite dev proxy, so no CORS: cross-site pages can't use the session cookie
 const app = express();
-app.use(cors());
 app.use(express.json());
 
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const io = new Server(server);
 
 // Fixed seed locations + a bounded oscillating simulation stand in for the real IoT feed.
 // Swap `tick()` for real sensor ingestion and forecast.js for the trained model when hardware/data exist.
@@ -37,6 +37,19 @@ const SHELTERS = [
 const TEAMS = ["NDRF Battalion 4", "TN SDRF Unit 2", "GCC Rapid Response", "Fire & Rescue Services", "Chennai Traffic Police"];
 
 const db = openDb();
+const auth = createAuth(db.raw);
+app.use(attachUser(auth));
+
+const STAFF = ["admin", "officer", "viewer"];
+const RESPONDERS = ["admin", "officer"];
+const STAFF_ROOM = "staff";
+
+// staff sockets join a room; incident and report events (reporter names, dispatch) only go there
+io.on("connection", (socket) => {
+  const user = auth.userFromCookieHeader(socket.handshake.headers.cookie);
+  if (user) socket.join(STAFF_ROOM);
+});
+const toStaff = (event, payload) => io.to(STAFF_ROOM).emit(event, payload);
 const DEFAULT_THRESHOLDS = { warning: 40, danger: 70 };
 let thresholds = db.getSetting("thresholds", DEFAULT_THRESHOLDS);
 
@@ -120,13 +133,13 @@ function updateIncidents(payload) {
         incidents.unshift(inc);
         incidents = incidents.slice(0, INCIDENTS_CAP);
         saveIncident(inc);
-        io.emit("incident-opened", inc);
+        toStaff("incident-opened", inc);
         addBroadcast({ zoneId: p.id, severity: "danger", message: `FLOOD WARNING: Water levels critical in ${p.name}. Move to higher ground or the nearest relief shelter.`, channels: ["sms", "push"], source: "auto" });
       } else if (open) {
         open.currentLevel = p.level;
         if (p.level > open.peakLevel) open.peakLevel = p.level;
         saveIncident(open);
-        io.emit("incident-updated", open);
+        toStaff("incident-updated", open);
       }
     } else if (open && p.level < thresholds.danger - CLEAR_MARGIN) {
       open.status = "cleared";
@@ -134,7 +147,7 @@ function updateIncidents(payload) {
       open.currentLevel = p.level;
       open.log.push({ ts: p.ts, text: `Level receded to ${p.level}% — incident auto-cleared` });
       saveIncident(open);
-      io.emit("incident-updated", open);
+      toStaff("incident-updated", open);
     }
   });
 }
@@ -175,11 +188,35 @@ function tick() {
 
 setInterval(tick, 2000);
 
-app.get("/api/state", (req, res) => {
+app.post("/api/auth/login", (req, res) => {
+  const { username, password } = req.body || {};
+  const result = auth.login(username, password);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.setHeader("Set-Cookie", auth.sessionCookie(result.token));
+  res.json(result.user);
+});
+
+app.post("/api/auth/logout", (req, res) => {
+  auth.logout(req.headers.cookie);
+  res.setHeader("Set-Cookie", auth.clearedCookie());
+  res.json({ ok: true });
+});
+
+app.get("/api/auth/me", (req, res) => {
+  if (!req.user) return res.status(401).json({ error: "Not signed in" });
+  res.json(req.user);
+});
+
+// citizen app: live levels, shelters, public alerts; nothing with reporter names or dispatch details
+app.get("/api/public-state", (req, res) => {
+  res.json({ locations: currentSnapshot(), broadcasts, shelters: SHELTERS, thresholds });
+});
+
+app.get("/api/state", requireRole(...STAFF), (req, res) => {
   res.json({ locations: currentSnapshot(), history, incidents, reports: citizenReports, broadcasts, shelters: SHELTERS, teams: TEAMS, thresholds });
 });
 
-app.put("/api/thresholds", (req, res) => {
+app.put("/api/thresholds", requireRole("admin"), (req, res) => {
   const { warning, danger } = req.body;
   if (typeof warning === "number" && typeof danger === "number" && warning < danger) {
     thresholds = { warning, danger };
@@ -189,7 +226,7 @@ app.put("/api/thresholds", (req, res) => {
   res.json(thresholds);
 });
 
-app.post("/api/simulate/storm", (req, res) => {
+app.post("/api/simulate/storm", requireRole("admin"), (req, res) => {
   const { zoneId, intensity } = req.body;
   const amount = Math.max(5, Math.min(60, Number(intensity) || 30));
   LOCATIONS.filter((l) => zoneId === "all" || l.id === zoneId).forEach((l) => { l.storm += amount; });
@@ -221,35 +258,35 @@ app.post("/api/citizen-report", (req, res) => {
   citizenReports.unshift(report);
   citizenReports = citizenReports.slice(0, REPORTS_CAP);
   saveReport(report);
-  io.emit("citizen-report", report);
+  toStaff("citizen-report", report);
   res.json(report);
 });
 
-app.patch("/api/citizen-report/:id", (req, res) => {
+app.patch("/api/citizen-report/:id", requireRole(...RESPONDERS), (req, res) => {
   const report = citizenReports.find((r) => r.id === req.params.id);
   if (!report) return res.status(404).json({ error: "not found" });
   if (["open", "in_progress", "resolved"].includes(req.body.status)) report.status = req.body.status;
   saveReport(report);
-  io.emit("report-updated", report);
+  toStaff("report-updated", report);
   res.json(report);
 });
 
-app.patch("/api/incidents/:id", (req, res) => {
+app.patch("/api/incidents/:id", requireRole(...RESPONDERS), (req, res) => {
   const inc = incidents.find((i) => i.id === req.params.id);
   if (!inc) return res.status(404).json({ error: "not found" });
   const { team, note } = req.body;
   if (team && TEAMS.includes(team)) {
     inc.team = team;
     if (inc.status === "active") inc.status = "responding";
-    inc.log.push({ ts: Date.now(), text: `${team} dispatched` });
+    inc.log.push({ ts: Date.now(), text: `${team} dispatched by ${req.user.name}` });
   }
-  if (note && String(note).trim()) inc.log.push({ ts: Date.now(), text: String(note).slice(0, 200) });
+  if (note && String(note).trim()) inc.log.push({ ts: Date.now(), text: `${req.user.name}: ${String(note).slice(0, 200)}` });
   saveIncident(inc);
-  io.emit("incident-updated", inc);
+  toStaff("incident-updated", inc);
   res.json(inc);
 });
 
-app.post("/api/broadcasts", (req, res) => {
+app.post("/api/broadcasts", requireRole("admin"), (req, res) => {
   const { zoneId, severity, message, channels } = req.body;
   if (!message || !String(message).trim()) return res.status(400).json({ error: "message required" });
   const valid = ["sms", "push", "siren"].filter((c) => Array.isArray(channels) && channels.includes(c));
@@ -258,7 +295,7 @@ app.post("/api/broadcasts", (req, res) => {
 });
 
 // wipes reports, incidents and broadcasts (they persist across restarts now, so test runs pile up)
-app.post("/api/admin/clear-data", (req, res) => {
+app.post("/api/admin/clear-data", requireRole("admin"), (req, res) => {
   db.clearRecords();
   incidents = [];
   citizenReports = [];

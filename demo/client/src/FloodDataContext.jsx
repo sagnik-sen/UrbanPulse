@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { io } from "socket.io-client";
+import { useAuth } from "./AuthContext";
 
 // same-origin: Vite proxies /api and /socket.io to the backend in dev
 const SERVER_URL = "";
@@ -14,7 +15,7 @@ async function api(path, method, body) {
     body: JSON.stringify(body),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Request failed");
+  if (!res.ok) throw Object.assign(new Error(data.error || "Request failed"), { status: res.status });
   return data;
 }
 
@@ -27,6 +28,8 @@ async function planEvacuation(lat, lng) {
 }
 
 export function FloodDataProvider({ children }) {
+  const { user, expire } = useAuth();
+  const userId = user?.id;
   const [locations, setLocations] = useState([]);
   const [history, setHistory] = useState({});
   const [trend, setTrend] = useState([]);
@@ -47,24 +50,28 @@ export function FloodDataProvider({ children }) {
 
   const dismissToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
 
+  // staff get the full picture; the public citizen app gets levels, shelters and alerts only
   useEffect(() => {
     let cancelled = false;
-    fetch(`${SERVER_URL}/api/state`)
-      .then((r) => r.json())
+    fetch(`${SERVER_URL}${userId ? "/api/state" : "/api/public-state"}`)
+      .then((r) => {
+        if (r.status === 401) expire();
+        return r.ok ? r.json() : null;
+      })
       .then((s) => {
-        if (cancelled) return;
+        if (cancelled || !s) return;
         setLocations(s.locations);
-        setHistory(Object.fromEntries(Object.entries(s.history).map(([id, arr]) => [id, arr.map((p) => ({ time: fmtTime(p.ts), level: p.level }))])));
-        setIncidents(s.incidents);
-        setReports(s.reports);
+        setHistory(Object.fromEntries(Object.entries(s.history ?? {}).map(([id, arr]) => [id, arr.map((p) => ({ time: fmtTime(p.ts), level: p.level }))])));
+        setIncidents(s.incidents ?? []);
+        setReports(s.reports ?? []);
         setBroadcasts(s.broadcasts);
         setShelters(s.shelters);
-        setTeams(s.teams);
+        setTeams(s.teams ?? []);
         setThresholds(s.thresholds);
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [userId, expire]);
 
   useEffect(() => {
     const socket = io();
@@ -110,20 +117,26 @@ export function FloodDataProvider({ children }) {
     });
 
     return () => socket.disconnect();
-  }, [pushToast]);
+  }, [pushToast, userId]); // reconnect on sign-in/out so the server re-checks the session and room
+
+  // any 401 means the session is gone: drop to the sign-in screen
+  const call = (promise) => promise.catch((err) => {
+    if (err.status === 401) expire();
+    throw err;
+  });
 
   const value = {
     locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts,
     pushToast,
     dismissToast,
     submitReport: (body) => api("/api/citizen-report", "POST", body),
-    setReportStatus: (id, status) => api(`/api/citizen-report/${id}`, "PATCH", { status }),
-    updateIncident: (id, body) => api(`/api/incidents/${id}`, "PATCH", body),
-    sendBroadcast: (body) => api("/api/broadcasts", "POST", body),
-    triggerStorm: (zoneId, intensity) => api("/api/simulate/storm", "POST", { zoneId, intensity }),
-    updateThresholds: (next) => api("/api/thresholds", "PUT", next).then(setThresholds),
+    setReportStatus: (id, status) => call(api(`/api/citizen-report/${id}`, "PATCH", { status })),
+    updateIncident: (id, body) => call(api(`/api/incidents/${id}`, "PATCH", body)),
+    sendBroadcast: (body) => call(api("/api/broadcasts", "POST", body)),
+    triggerStorm: (zoneId, intensity) => call(api("/api/simulate/storm", "POST", { zoneId, intensity })),
+    updateThresholds: (next) => call(api("/api/thresholds", "PUT", next)).then(setThresholds),
     planEvacuation,
-    clearDemoData: () => api("/api/admin/clear-data", "POST", {}),
+    clearDemoData: () => call(api("/api/admin/clear-data", "POST", {})),
   };
 
   return <FloodDataContext.Provider value={value}>{children}</FloodDataContext.Provider>;

@@ -1,6 +1,7 @@
 import { useParams, Link } from "react-router-dom";
 import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, Legend } from "recharts";
 import { useFloodData } from "../FloodDataContext";
+import { useAuth } from "../AuthContext";
 import { STATUS, ZONE_COLOR, INCIDENT_STATUS, CATEGORIES, SEVERITY, timeAgo, duration, formatCount } from "../constants";
 
 const SIM_MIN_PER_TICK = 2; // matches server: one 2s tick = 2 simulated minutes
@@ -8,6 +9,7 @@ const SIM_MIN_PER_TICK = 2; // matches server: one 2s tick = 2 simulated minutes
 export default function ZoneDetail() {
   const { id } = useParams();
   const { locations, history, incidents, reports, shelters, thresholds, triggerStorm, pushToast } = useFloodData();
+  const { can } = useAuth();
   const loc = locations.find((l) => l.id === id);
 
   if (!loc) {
@@ -49,8 +51,8 @@ export default function ZoneDetail() {
         <div className="head-actions">
           <span className="badge"><span className="badge-dot" style={{ background: STATUS[loc.risk].color }} />{STATUS[loc.risk].label}</span>
           <Link to={`/map?evacFrom=${loc.id}`} className="btn ghost">🧭 Evacuation route</Link>
-          <Link to="/broadcasts" className="btn ghost">Broadcast to zone</Link>
-          <button className="btn danger" onClick={storm}>⛈ Simulate storm here</button>
+          {can.manage && <Link to="/broadcasts" className="btn ghost">Broadcast to zone</Link>}
+          {can.manage && <button className="btn danger" onClick={storm}>⛈ Simulate storm here</button>}
         </div>
       </div>
 

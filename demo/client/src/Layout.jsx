@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useFloodData } from "./FloodDataContext";
 import ReportModal from "./ReportModal";
 import Toasts from "./Toasts";
+import { useAuth, ROLE_LABEL } from "./AuthContext";
 
 export default function Layout() {
   const { connected, incidents, reports } = useFloodData();
+  const { user, logout, can } = useAuth();
+  const navigate = useNavigate();
   const [now, setNow] = useState(Date.now());
   const [reportOpen, setReportOpen] = useState(false);
 
@@ -27,8 +30,13 @@ export default function Layout() {
     { to: "/shelters", label: "Relief Shelters" },
     { to: "/analytics", label: "Analytics" },
     { to: "/architecture", label: "Architecture" },
-    { to: "/settings", label: "Settings" },
-  ];
+    can.manage && { to: "/settings", label: "Settings" },
+  ].filter(Boolean);
+
+  const signOut = async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <div className="shell">
@@ -49,6 +57,14 @@ export default function Layout() {
           ))}
         </nav>
         <a href="/citizen" target="_blank" rel="noreferrer" className="nav-item citizen-link">Citizen app ↗</a>
+        <div className="user-box">
+          <div className="user-avatar" aria-hidden="true">{user.name[0]}</div>
+          <div className="user-meta">
+            <div className="user-name">{user.name}</div>
+            <div className="muted small">{ROLE_LABEL[user.role]}</div>
+          </div>
+          <button className="icon-btn" onClick={signOut} title="Sign out" aria-label="Sign out">⎋</button>
+        </div>
         <div className="sidebar-footer">
           <span className={`dot ${connected ? "on" : "off"}`} />
           {connected ? "Live feed connected" : "Reconnecting…"}

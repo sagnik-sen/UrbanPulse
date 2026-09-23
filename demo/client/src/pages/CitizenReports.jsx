@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { useFloodData } from "../FloodDataContext";
+import { useAuth } from "../AuthContext";
 import { CATEGORIES, SEVERITY, REPORT_STATUS, timeAgo, downloadCsv } from "../constants";
 import ReportModal from "../ReportModal";
 
 export default function CitizenReports() {
   const { reports, setReportStatus } = useFloodData();
+  const { can } = useAuth();
   const [status, setStatus] = useState("all");
   const [severity, setSeverity] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
@@ -63,9 +65,13 @@ export default function CitizenReports() {
                   <td className="desc-cell">{r.description}</td>
                   <td className="muted small">{r.reporter}</td>
                   <td>
-                    <select className="select" value={r.status} onChange={(e) => setReportStatus(r.id, e.target.value)} aria-label="Report status">
-                      {Object.entries(REPORT_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                    </select>
+                    {can.respond ? (
+                      <select className="select" value={r.status} onChange={(e) => setReportStatus(r.id, e.target.value)} aria-label="Report status">
+                        {Object.entries(REPORT_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                      </select>
+                    ) : (
+                      <span className="badge"><span className="badge-dot" style={{ background: REPORT_STATUS[r.status].color }} />{REPORT_STATUS[r.status].label}</span>
+                    )}
                   </td>
                 </tr>
               ))}
