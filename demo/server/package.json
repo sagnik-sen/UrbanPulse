@@ -1,0 +1,20 @@
+{
+  "name": "urbanpulse-server",
+  "version": "1.0.0",
+  "description": "UrbanPulse Chennai flood monitoring server (sensor simulation, forecasting, evacuation routing)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test test.js"
+  },
+  "keywords": [],
+  "author": "Sagnik Sen",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
+  },
+  "private": true
+}
