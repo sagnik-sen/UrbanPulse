@@ -42,8 +42,17 @@ function forecast(series, horizon) {
     dampSum += PHI ** h;
     const holt = level + dampSum * trend;
     const mean = baseline + (holt - baseline) * DRAIN ** h;
-    const spread = 1.96 * sigma * Math.sqrt(Math.min(h, BAND_GROWTH_CAP));
-    out.push({ h, mean: Math.round(clamp(mean)), lo: Math.round(clamp(mean - spread)), hi: Math.round(clamp(mean + spread)) });
+    const stepSigma = sigma * Math.sqrt(Math.min(h, BAND_GROWTH_CAP));
+    const spread = 1.96 * stepSigma;
+    // mean/lo/hi are display values (clamped, rounded); rawMean/sigma feed the risk maths unclamped
+    out.push({
+      h,
+      mean: Math.round(clamp(mean)),
+      lo: Math.round(clamp(mean - spread)),
+      hi: Math.round(clamp(mean + spread)),
+      rawMean: Math.round(mean * 100) / 100,
+      sigma: Math.round(stepSigma * 100) / 100,
+    });
   }
   return out;
 }

@@ -145,3 +145,10 @@ test("simulator is reproducible from a seed, bounded, and responds to storms", (
   const vel = (rows) => rows[51][1];
   assert.ok(vel(run(7, true)) > vel(run(7, false)) + 30);
 });
+
+test("forecast exposes unclamped mean and a sigma that grows with horizon", () => {
+  const path = forecast([...Array(20).fill(50), 60, 75, 90, 100, 100, 100, 100, 100, 100, 100], 60);
+  assert.ok(path.every((p) => Number.isFinite(p.rawMean) && p.sigma > 0));
+  assert.ok(path[30].sigma > path[0].sigma);
+  assert.ok(path[0].rawMean >= path[0].mean - 0.5, "raw mean is not clipped to 100");
+});
