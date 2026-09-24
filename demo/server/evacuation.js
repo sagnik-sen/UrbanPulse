@@ -1,53 +1,50 @@
-// Flood-aware evacuation planning. OSRM gives real road routes but has no way
-// to "avoid this area", so we ask it for alternatives plus detours around each
-// flooded zone the direct route crosses, then score every candidate.
-const ZONE_RADIUS_KM = 1.5;
+// Flood-aware evacuation planning. OSRM gives real road routes but can't "avoid this area",
+// so we ask for alternatives plus detours around each zone the route is predicted to cross,
+// then score every candidate under a pluggable risk model (see risk.js).
+const { distanceKm, ZONE_RADIUS_KM } = require("./risk");
+
 const DETOUR_CLEARANCE_KM = 1.2;
 const MAX_SHELTERS = 3;
 const MAX_DETOUR_ZONES = 2;
-const DANGER_MIN_PER_KM = 20; // a km through floodwater "costs" 20 extra minutes
-const WARNING_MIN_PER_KM = 3;
+const SAMPLE_KM = 0.2;
+const CROSSED_P = 0.5; // a zone counts as "crossed" if the route is more likely than not flooded there
+const DANGER_MIN_PER_KM = 20; // one expected km through floodwater costs 20 extra minutes
 const NEAR_FULL_PENALTY_MIN = 15;
 const SHELTER_IN_DANGER_PENALTY_MIN = 120; // never send people deeper into a flood unless nothing else is open
 
 const KM_PER_DEG_LAT = 110.574;
 const kmPerDegLng = (lat) => 111.32 * Math.cos((lat * Math.PI) / 180);
 
-function distanceKm(a, b) {
-  const R = 6371;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
-const SAMPLE_KM = 0.2;
-
-// km of the route inside danger / warning zone circles. Long segments are sampled
-// every SAMPLE_KM so a straight line through a zone centre isn't missed.
-function routeExposure(coords, zones) {
-  let dangerKm = 0;
-  let warningKm = 0;
-  const crossed = new Set();
-  const risky = zones.filter((z) => z.risk !== "safe");
+// Walk the route; each ~200 m piece is evaluated at the time the evacuee reaches it
+// (assumes constant speed along the route). Returns expected km through floodwater.
+function routeExposure(route, risk) {
+  const coords = route.coords;
+  const segs = [];
+  let total = 0;
   for (let i = 1; i < coords.length; i++) {
     const a = { lat: coords[i - 1][0], lng: coords[i - 1][1] };
     const b = { lat: coords[i][0], lng: coords[i][1] };
-    const seg = distanceKm(a, b);
-    const pieces = Math.max(1, Math.ceil(seg / SAMPLE_KM));
+    const km = distanceKm(a, b);
+    segs.push({ a, b, km });
+    total += km;
+  }
+
+  let expectedFloodKm = 0;
+  const crossed = new Set();
+  let travelled = 0;
+  for (const { a, b, km } of segs) {
+    const pieces = Math.max(1, Math.ceil(km / SAMPLE_KM));
     for (let k = 0; k < pieces; k++) {
       const f = (k + 0.5) / pieces;
       const p = { lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f };
-      const inDanger = risky.find((z) => z.risk === "danger" && distanceKm(p, z) <= ZONE_RADIUS_KM);
-      if (inDanger) {
-        dangerKm += seg / pieces;
-        crossed.add(inDanger.id);
-      } else if (risky.some((z) => distanceKm(p, z) <= ZONE_RADIUS_KM)) {
-        warningKm += seg / pieces;
-      }
+      const minutes = total > 0 ? (route.durationMin * (travelled + km * f)) / total : 0;
+      const r = risk.at(p, minutes);
+      expectedFloodKm += (km / pieces) * r.p;
+      if (r.zoneId && r.p >= CROSSED_P) crossed.add(r.zoneId);
     }
+    travelled += km;
   }
-  return { dangerKm, warningKm, crossed: [...crossed] };
+  return { expectedFloodKm, crossed: [...crossed] };
 }
 
 // two waypoints either side of the zone, perpendicular to the from->to direction
@@ -65,12 +62,16 @@ function detourPoints(from, to, zone) {
   }));
 }
 
-function score(route, shelter, zones) {
-  const exposure = routeExposure(route.coords, zones);
-  let cost = route.durationMin + DANGER_MIN_PER_KM * exposure.dangerKm + WARNING_MIN_PER_KM * exposure.warningKm;
-  if (shelter.occupancy / shelter.capacity >= 0.9) cost += NEAR_FULL_PENALTY_MIN;
-  if (zones.some((z) => z.risk === "danger" && distanceKm(shelter, z) <= ZONE_RADIUS_KM)) cost += SHELTER_IN_DANGER_PENALTY_MIN;
-  return { ...route, ...exposure, cost };
+const freeBeds = (shelter, reserved = {}) => shelter.capacity - shelter.occupancy - (reserved[shelter.id] || 0);
+
+function score(route, shelter, risk, reserved) {
+  const exposure = routeExposure(route, risk);
+  let cost = route.durationMin + DANGER_MIN_PER_KM * exposure.expectedFloodKm;
+  const expectedLoad = (shelter.occupancy + (reserved[shelter.id] || 0)) / shelter.capacity;
+  if (expectedLoad >= 0.9) cost += NEAR_FULL_PENALTY_MIN;
+  const shelterRisk = risk.at(shelter, route.durationMin).p;
+  cost += SHELTER_IN_DANGER_PENALTY_MIN * shelterRisk;
+  return { ...route, ...exposure, shelterRisk, cost };
 }
 
 function straightLine(from, shelter) {
@@ -78,31 +79,37 @@ function straightLine(from, shelter) {
   return { coords: [[from.lat, from.lng], [shelter.lat, shelter.lng]], distanceKm: km, durationMin: (km / 25) * 60 };
 }
 
-// fetchRoute(points, { alternatives }) -> [{ coords: [[lat,lng]], distanceKm, durationMin }]; throws when routing is unavailable
-async function planEvacuation({ from, shelters, zones, fetchRoute }) {
+// All candidate routes from `from` to each of the nearest open shelters, scored under `risk`.
+// fetchRoute(points, { alternatives }) -> [{ coords, distanceKm, durationMin }]; throws when routing is unavailable.
+async function candidateRoutes({ from, shelters, zones, risk, fetchRoute, reserved = {}, maxShelters = MAX_SHELTERS }) {
   const open = shelters
-    .filter((s) => s.occupancy < s.capacity)
+    .filter((s) => freeBeds(s, reserved) > 0)
     .sort((a, b) => distanceKm(from, a) - distanceKm(from, b))
-    .slice(0, MAX_SHELTERS);
+    .slice(0, maxShelters);
+
+  return Promise.all(open.map(async (shelter) => {
+    const direct = (await fetchRoute([from, shelter], { alternatives: true })).map((r) => score(r, shelter, risk, reserved));
+    const bestDirect = direct.reduce((a, b) => (b.cost < a.cost ? b : a));
+    // detouring around the zone you start or end in is pointless; you have to be in it
+    const detourZones = bestDirect.crossed
+      .map((id) => zones.find((z) => z.id === id))
+      .filter((z) => z && distanceKm(from, z) > ZONE_RADIUS_KM && distanceKm(shelter, z) > ZONE_RADIUS_KM)
+      .slice(0, MAX_DETOUR_ZONES);
+    const detours = await Promise.all(
+      detourZones.flatMap((z) => detourPoints(from, shelter, z)).map((via) =>
+        fetchRoute([from, via, shelter], { alternatives: false }).then((rs) => rs.map((r) => score(r, shelter, risk, reserved))).catch(() => [])
+      )
+    );
+    return { shelter, directCrossed: bestDirect.crossed, candidates: [...direct, ...detours.flat()] };
+  }));
+}
+
+async function planEvacuation({ from, shelters, zones, risk, fetchRoute, reserved = {} }) {
+  const open = shelters.filter((s) => freeBeds(s, reserved) > 0);
   if (open.length === 0) return null;
 
   try {
-    const perShelter = await Promise.all(open.map(async (shelter) => {
-      const direct = (await fetchRoute([from, shelter], { alternatives: true })).map((r) => score(r, shelter, zones));
-      const bestDirect = direct.reduce((a, b) => (b.cost < a.cost ? b : a));
-      // detouring around the zone you start or end in is pointless; you have to be in it
-      const detourZones = bestDirect.crossed
-        .map((id) => zones.find((z) => z.id === id))
-        .filter((z) => distanceKm(from, z) > ZONE_RADIUS_KM && distanceKm(shelter, z) > ZONE_RADIUS_KM)
-        .slice(0, MAX_DETOUR_ZONES);
-      const detours = await Promise.all(
-        detourZones.flatMap((z) => detourPoints(from, shelter, z)).map((via) =>
-          fetchRoute([from, via, shelter], { alternatives: false }).then((rs) => rs.map((r) => score(r, shelter, zones))).catch(() => [])
-        )
-      );
-      return { shelter, directCrossed: bestDirect.crossed, candidates: [...direct, ...detours.flat()] };
-    }));
-
+    const perShelter = await candidateRoutes({ from, shelters, zones, risk, fetchRoute, reserved });
     let best = null;
     for (const { shelter, directCrossed, candidates } of perShelter) {
       for (const route of candidates) {
@@ -112,9 +119,9 @@ async function planEvacuation({ from, shelters, zones, fetchRoute }) {
     const avoided = best.directCrossed.filter((id) => !best.route.crossed.includes(id));
     return { shelter: best.shelter, route: best.route, avoided, source: "osrm" };
   } catch {
-    const shelter = open[0];
-    return { shelter, route: score(straightLine(from, shelter), shelter, zones), avoided: [], source: "fallback" };
+    const shelter = open.sort((a, b) => distanceKm(from, a) - distanceKm(from, b))[0];
+    return { shelter, route: score(straightLine(from, shelter), shelter, risk, reserved), avoided: [], source: "fallback" };
   }
 }
 
-module.exports = { planEvacuation, routeExposure, detourPoints, distanceKm, ZONE_RADIUS_KM };
+module.exports = { planEvacuation, candidateRoutes, routeExposure, detourPoints, score, freeBeds, straightLine, distanceKm, ZONE_RADIUS_KM, DANGER_MIN_PER_KM };

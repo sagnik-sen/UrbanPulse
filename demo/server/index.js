@@ -3,6 +3,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const { forecast, stepsToBreach } = require("./forecast");
 const { planEvacuation, distanceKm } = require("./evacuation");
+const { forecastRisk } = require("./risk");
 const { openDb } = require("./db");
 const { randomUUID } = require("node:crypto");
 const { createAuth, attachUser, requireRole } = require("./auth");
@@ -318,7 +319,8 @@ app.get("/api/evacuation-route", async (req, res) => {
   if (cached && Date.now() - cached.at < ROUTE_CACHE_MS) return res.json(cached.plan);
 
   const from = { lat, lng };
-  const plan = await planEvacuation({ from, shelters: SHELTERS, zones, fetchRoute: fetchOsrm });
+  const risk = forecastRisk(zones, thresholds.danger, SIM_MIN_PER_TICK);
+  const plan = await planEvacuation({ from, shelters: SHELTERS, zones, risk, fetchRoute: fetchOsrm });
   if (!plan) return res.status(503).json({ error: "All shelters are at capacity" });
 
   const originZone = zones.reduce((best, z) => (distanceKm(from, z) < distanceKm(from, best) ? z : best));
@@ -330,8 +332,8 @@ app.get("/api/evacuation-route", async (req, res) => {
       coords: plan.route.coords,
       distanceKm: Math.round(plan.route.distanceKm * 10) / 10,
       durationMin: Math.round(plan.route.durationMin),
-      dangerKm: Math.round(plan.route.dangerKm * 10) / 10,
-      warningKm: Math.round(plan.route.warningKm * 10) / 10,
+      // expected km of road that will be flooded at the moment the evacuee passes it
+      expectedFloodKm: Math.round(plan.route.expectedFloodKm * 10) / 10,
     },
     avoided: plan.avoided.map((id) => zones.find((z) => z.id === id).name),
     source: plan.source,

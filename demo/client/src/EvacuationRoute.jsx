@@ -80,16 +80,16 @@ export function RouteSummary({ plan, loading, error, onClear }) {
         <div><span className="route-num">{route.durationMin}</span> min drive</div>
         <div><span className="route-num">{free}</span> beds free</div>
       </div>
-      {route.dangerKm > 0 ? (
+      {route.expectedFloodKm >= 0.1 ? (
         <div className="route-note danger">
-          ⚠ {route.dangerKm} km through flooded roads{startsInFlood ? ", unavoidable leaving " + plan.originZone.name : ""}. Move slowly, avoid moving water.
+          ⚠ ~{route.expectedFloodKm} km likely flooded by the time you pass{startsInFlood ? ", mostly unavoidable leaving " + plan.originZone.name : ""}. Move slowly, avoid moving water.
         </div>
       ) : (
-        <div className="route-note safe">✓ Route avoids all active danger zones</div>
+        <div className="route-note safe">✓ Route expected to stay clear of floodwater along the way</div>
       )}
       {plan.avoided.length > 0 && <div className="route-note">↪ Rerouted around {plan.avoided.join(", ")}</div>}
       {plan.source === "fallback" && <div className="route-note">Road routing unavailable, showing straight-line direction only.</div>}
-      <div className="muted small">Planned {new Date(plan.plannedAt).toLocaleTimeString()} from live flood data{onClear ? " · click the map to re-plan" : ""}</div>
+      <div className="muted small">Planned {new Date(plan.plannedAt).toLocaleTimeString()} using the live forecast{onClear ? " · click the map to re-plan" : ""}</div>
     </div>
   );
 }

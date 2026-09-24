@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert");
 const { forecast, stepsToBreach } = require("./forecast");
 const { planEvacuation, routeExposure } = require("./evacuation");
+const { snapshotRisk, forecastRisk, levelDistribution } = require("./risk");
 const { openDb } = require("./db");
 const { createZones, stepZones, injectStorm, seededRng } = require("./simulator");
 const { createAuth, hashPassword, verifyPassword, requireRole } = require("./auth");
@@ -36,11 +37,12 @@ test("already above threshold breaches at step 0; short series gives no forecast
 const zone = { id: "z", lat: 13.0, lng: 80.2, risk: "danger" };
 
 test("route through a danger zone is measured, a distant one is not", () => {
-  const through = routeExposure([[12.98, 80.2], [13.0, 80.2], [13.02, 80.2]], [zone]);
-  assert.ok(through.dangerKm > 1);
+  const risk = snapshotRisk([zone]);
+  const through = routeExposure({ coords: [[12.98, 80.2], [13.0, 80.2], [13.02, 80.2]], durationMin: 6 }, risk);
+  assert.ok(through.expectedFloodKm > 1);
   assert.deepEqual(through.crossed, ["z"]);
-  const away = routeExposure([[12.98, 80.3], [13.02, 80.3]], [zone]);
-  assert.equal(away.dangerKm, 0);
+  const away = routeExposure({ coords: [[12.98, 80.3], [13.02, 80.3]], durationMin: 6 }, risk);
+  assert.equal(away.expectedFloodKm, 0);
 });
 
 test("planner prefers a detour around the flooded zone", async () => {
@@ -50,9 +52,9 @@ test("planner prefers a detour around the flooded zone", async () => {
     points.length === 2
       ? [{ coords: [[12.97, 80.2], [13.0, 80.2], [13.03, 80.2]], distanceKm: 6.7, durationMin: 10 }]
       : [{ coords: [[12.97, 80.2], [points[1].lat, points[1].lng], [13.03, 80.2]], distanceKm: 9, durationMin: 16 }];
-  const plan = await planEvacuation({ from, shelters: [shelter], zones: [zone], fetchRoute });
+  const plan = await planEvacuation({ from, shelters: [shelter], zones: [zone], risk: snapshotRisk([zone]), fetchRoute });
   assert.equal(plan.source, "osrm");
-  assert.equal(plan.route.dangerKm, 0);
+  assert.equal(plan.route.expectedFloodKm, 0);
   assert.deepEqual(plan.avoided, ["z"]);
 });
 
@@ -61,7 +63,7 @@ test("planner falls back to a straight line when routing fails, and skips full s
     { id: "full", lat: 12.971, lng: 80.2, capacity: 10, occupancy: 10 },
     { id: "ok", lat: 13.05, lng: 80.25, capacity: 10, occupancy: 0 },
   ];
-  const plan = await planEvacuation({ from: { lat: 12.97, lng: 80.2 }, shelters, zones: [], fetchRoute: async () => { throw new Error("down"); } });
+  const plan = await planEvacuation({ from: { lat: 12.97, lng: 80.2 }, shelters, zones: [], risk: snapshotRisk([]), fetchRoute: async () => { throw new Error("down"); } });
   assert.equal(plan.source, "fallback");
   assert.equal(plan.shelter.id, "ok");
 });
@@ -71,7 +73,7 @@ test("planner avoids a shelter inside an active danger zone when another is open
   const inFlood = { id: "flooded", lat: 13.0, lng: 80.201, capacity: 100, occupancy: 0 };
   const dry = { id: "dry", lat: 13.06, lng: 80.2, capacity: 100, occupancy: 0 };
   const fetchRoute = async ([a, b]) => [{ coords: [[a.lat, a.lng], [b.lat, b.lng]], distanceKm: 1, durationMin: b.id === "dry" ? 15 : 2 }];
-  const plan = await planEvacuation({ from, shelters: [inFlood, dry], zones: [zone], fetchRoute });
+  const plan = await planEvacuation({ from, shelters: [inFlood, dry], zones: [zone], risk: snapshotRisk([zone]), fetchRoute });
   assert.equal(plan.shelter.id, "dry");
 });
 
@@ -151,4 +153,41 @@ test("forecast exposes unclamped mean and a sigma that grows with horizon", () =
   assert.ok(path.every((p) => Number.isFinite(p.rawMean) && p.sigma > 0));
   assert.ok(path[30].sigma > path[0].sigma);
   assert.ok(path[0].rawMean >= path[0].mean - 0.5, "raw mean is not clipped to 100");
+});
+
+// a zone whose forecast is a flat line at `level` with a fixed sigma
+const flatForecast = (level, sigma = 3, steps = 30) => Array.from({ length: steps }, (_, i) => ({ h: i + 1, mean: level, lo: level, hi: level, rawMean: level, sigma }));
+
+test("forecast risk maps minutes to forecast steps, interpolates, and holds beyond the horizon", () => {
+  const zone = { id: "z", lat: 13, lng: 80.2, level: 50, forecast: [
+    { h: 1, rawMean: 60, sigma: 2 }, { h: 2, rawMean: 80, sigma: 4 },
+  ] };
+  assert.equal(levelDistribution(zone, 0, 2).mean, 50);
+  assert.equal(levelDistribution(zone, 1, 2).mean, 55); // halfway to step 1
+  assert.equal(levelDistribution(zone, 3, 2).mean, 70); // halfway between steps 1 and 2
+  assert.equal(levelDistribution(zone, 99, 2).mean, 80); // held at horizon
+  assert.equal(levelDistribution(zone, 99, 2).sigma, 4);
+});
+
+test("forecast risk probability rises with the projected level", () => {
+  const at = (level) => forecastRisk([{ id: "z", lat: 13, lng: 80.2, level, forecast: flatForecast(level) }], 70, 2).at({ lat: 13, lng: 80.2 }, 10).p;
+  assert.ok(at(50) < 0.01);
+  assert.ok(Math.abs(at(70) - 0.5) < 0.01);
+  assert.ok(at(90) > 0.99);
+  assert.ok(at(60) < at(65) && at(65) < at(75));
+});
+
+test("forecast-aware routing avoids a zone that is safe now but will flood; snapshot routing does not", async () => {
+  // two roads to the same shelter: one through a rising zone (safe now, flooded soon), one through a draining zone
+  const rising = { id: "rising", lat: 13.0, lng: 80.2, level: 30, risk: "safe", forecast: Array.from({ length: 30 }, (_, i) => ({ h: i + 1, rawMean: 30 + (i + 1) * 10, sigma: 3 })) };
+  const draining = { id: "draining", lat: 13.0, lng: 80.26, level: 75, risk: "danger", forecast: Array.from({ length: 30 }, (_, i) => ({ h: i + 1, rawMean: 75 - (i + 1) * 10, sigma: 3 })) };
+  const zones = [rising, draining];
+  const from = { lat: 12.96, lng: 80.23 };
+  const shelter = { id: "s", lat: 13.04, lng: 80.23, capacity: 100, occupancy: 0 };
+  const viaRising = { coords: [[12.96, 80.23], [13.0, 80.2], [13.04, 80.23]], distanceKm: 10, durationMin: 20 };
+  const viaDraining = { coords: [[12.96, 80.23], [13.0, 80.26], [13.04, 80.23]], distanceKm: 10, durationMin: 20 };
+  const fetchRoute = async () => [viaRising, viaDraining];
+  const pick = async (risk) => (await planEvacuation({ from, shelters: [shelter], zones, risk, fetchRoute })).route.coords[1][1];
+  assert.equal(await pick(snapshotRisk(zones)), 80.2, "snapshot sees the rising zone as safe and goes through it");
+  assert.equal(await pick(forecastRisk(zones, 70, 2)), 80.26, "forecast-aware goes through the zone that will have drained");
 });
