@@ -300,6 +300,19 @@ async function fetchOsrm(points, { alternatives }) {
   }));
 }
 
+// Seats held for people already travelling to a shelter, so parallel requests spread out
+// instead of all being sent to the same "free" shelter. Held for the drive plus a margin.
+const HOUSEHOLD_SIZE = 4;
+const HOLD_MARGIN_MS = 60 * 1000;
+let reservations = [];
+function reservedByShelter() {
+  const now = Date.now();
+  reservations = reservations.filter((r) => r.expiresAt > now);
+  const out = {};
+  for (const r of reservations) out[r.shelterId] = (out[r.shelterId] || 0) + r.people;
+  return out;
+}
+
 // public OSRM demo server is shared and rate-limited; reuse a plan while the flood picture is unchanged
 const routeCache = new Map();
 const ROUTE_CACHE_MS = 30000;
@@ -320,8 +333,11 @@ app.get("/api/evacuation-route", async (req, res) => {
 
   const from = { lat, lng };
   const risk = forecastRisk(zones, thresholds.danger, SIM_MIN_PER_TICK);
-  const plan = await planEvacuation({ from, shelters: SHELTERS, zones, risk, fetchRoute: fetchOsrm });
+  const reserved = reservedByShelter();
+  const plan = await planEvacuation({ from, shelters: SHELTERS, zones, risk, fetchRoute: fetchOsrm, reserved });
   if (!plan) return res.status(503).json({ error: "All shelters are at capacity" });
+  // one real second = one simulated minute, so a D-minute drive holds seats for D seconds (+ margin)
+  reservations.push({ shelterId: plan.shelter.id, people: HOUSEHOLD_SIZE, expiresAt: Date.now() + plan.route.durationMin * 1000 + HOLD_MARGIN_MS });
 
   const originZone = zones.reduce((best, z) => (distanceKm(from, z) < distanceKm(from, best) ? z : best));
   const body = {

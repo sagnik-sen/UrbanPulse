@@ -3,6 +3,7 @@ const assert = require("node:assert");
 const { forecast, stepsToBreach } = require("./forecast");
 const { planEvacuation, routeExposure } = require("./evacuation");
 const { snapshotRisk, forecastRisk, levelDistribution } = require("./risk");
+const { assignEvacuees, assignGreedyNearest } = require("./assignment");
 const { openDb } = require("./db");
 const { createZones, stepZones, injectStorm, seededRng } = require("./simulator");
 const { createAuth, hashPassword, verifyPassword, requireRole } = require("./auth");
@@ -190,4 +191,58 @@ test("forecast-aware routing avoids a zone that is safe now but will flood; snap
   const pick = async (risk) => (await planEvacuation({ from, shelters: [shelter], zones, risk, fetchRoute })).route.coords[1][1];
   assert.equal(await pick(snapshotRisk(zones)), 80.2, "snapshot sees the rising zone as safe and goes through it");
   assert.equal(await pick(forecastRisk(zones, 70, 2)), 80.26, "forecast-aware goes through the zone that will have drained");
+});
+
+const matrix = (m) => (a, b) => m[a][b];
+
+test("min-cost assignment beats greedy on a hand-solved instance", () => {
+  // A prefers X slightly; B badly needs X. Greedy (A first) sends B through a 100-cost route.
+  const problem = {
+    sources: [{ id: "A", people: 100 }, { id: "B", people: 100 }],
+    sinks: [{ id: "X", beds: 100 }, { id: "Y", beds: 100 }],
+    cost: matrix({ A: { X: 1, Y: 2 }, B: { X: 2, Y: 100 } }),
+  };
+  const opt = assignEvacuees(problem);
+  assert.equal(opt.totalCost, 400); // A->Y 100x2 + B->X 100x2, solved by hand
+  assert.equal(opt.assigned, 200);
+  const greedy = assignGreedyNearest(problem);
+  assert.equal(greedy.totalCost, 10100);
+});
+
+test("assignment never exceeds shelter beds and reports people it cannot place", () => {
+  const r = assignEvacuees({
+    sources: [{ id: "A", people: 250 }, { id: "B", people: 50 }],
+    sinks: [{ id: "X", beds: 120 }, { id: "Y", beds: 80 }],
+    cost: matrix({ A: { X: 5, Y: 9 }, B: { X: 1, Y: Infinity } }),
+  });
+  const into = (id) => r.flows.filter((f) => f.sink === id).reduce((s, f) => s + f.people, 0);
+  assert.ok(into("X") <= 120 && into("Y") <= 80);
+  assert.equal(r.assigned, 200);
+  assert.equal(r.unassigned.reduce((s, u) => s + u.people, 0), 100);
+  assert.ok(!r.flows.some((f) => f.source === "B" && f.sink === "Y"), "no route means no flow");
+});
+
+test("assignment is optimal on random instances (checked against brute force)", () => {
+  const rng = require("./simulator").seededRng(9);
+  for (let trial = 0; trial < 30; trial++) {
+    const people = [1 + Math.floor(rng() * 4), 1 + Math.floor(rng() * 4)];
+    const beds = [1 + Math.floor(rng() * 4), 1 + Math.floor(rng() * 4)];
+    const c = [[1 + Math.floor(rng() * 9), 1 + Math.floor(rng() * 9)], [1 + Math.floor(rng() * 9), 1 + Math.floor(rng() * 9)]];
+    const r = assignEvacuees({
+      sources: [{ id: 0, people: people[0] }, { id: 1, people: people[1] }],
+      sinks: [{ id: 0, beds: beds[0] }, { id: 1, beds: beds[1] }],
+      cost: (a, b) => c[a][b],
+    });
+    // brute force: a = people of source 0 sent to sink 0, b = people of source 1 sent to sink 0
+    let best = null;
+    for (let a = 0; a <= people[0]; a++) for (let a2 = 0; a2 <= people[0] - a; a2++)
+      for (let b = 0; b <= people[1]; b++) for (let b2 = 0; b2 <= people[1] - b; b2++) {
+        if (a + b > beds[0] || a2 + b2 > beds[1]) continue;
+        const flow = a + a2 + b + b2;
+        const cost = a * c[0][0] + a2 * c[0][1] + b * c[1][0] + b2 * c[1][1];
+        if (!best || flow > best.flow || (flow === best.flow && cost < best.cost)) best = { flow, cost };
+      }
+    assert.equal(r.assigned, best.flow, `trial ${trial} flow`);
+    assert.equal(r.totalCost, best.cost, `trial ${trial} cost`);
+  }
 });
