@@ -43,13 +43,13 @@ function zoneAt(point, zones) {
   return best;
 }
 
-function snapshotRisk(zones) {
+function snapshotRisk(zones, { warningWeight = WARNING_WEIGHT } = {}) {
   return {
     name: "snapshot",
     at(point) {
       const z = zoneAt(point, zones);
       if (!z) return { p: 0, zoneId: null };
-      return { p: z.risk === "danger" ? 1 : z.risk === "warning" ? WARNING_WEIGHT : 0, zoneId: z.id };
+      return { p: z.risk === "danger" ? 1 : z.risk === "warning" ? warningWeight : 0, zoneId: z.id };
     },
   };
 }

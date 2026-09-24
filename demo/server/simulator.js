@@ -32,12 +32,12 @@ function createShelters() {
 }
 
 // advance every zone one tick (t is the tick number after incrementing)
-function stepZones(zones, t, rng) {
+function stepZones(zones, t, rng, { stormDecay = STORM_DECAY } = {}) {
   for (const z of zones) {
     z.prevLevel = z.level;
     if (rng() < RAIN_BURST_CHANCE) z.surge += 20 + rng() * 15;
     z.surge *= RAIN_BURST_DECAY;
-    z.storm *= STORM_DECAY;
+    z.storm *= stormDecay;
     const oscillation = z.base + z.amplitude * Math.sin((t + z.phase) / 12);
     const noise = (rng() - 0.5) * 4;
     z.level = Math.max(0, Math.min(100, oscillation + noise + z.surge + z.storm));

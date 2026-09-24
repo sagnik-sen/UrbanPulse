@@ -5,3 +5,4 @@ dist/
 ~$*
 .claude/
 demo/server/data/
+demo/server/experiments/results/*.csv
