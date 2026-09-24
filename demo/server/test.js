@@ -3,6 +3,7 @@ const assert = require("node:assert");
 const { forecast, stepsToBreach } = require("./forecast");
 const { planEvacuation, routeExposure } = require("./evacuation");
 const { openDb } = require("./db");
+const { createZones, stepZones, injectStorm, seededRng } = require("./simulator");
 const { createAuth, hashPassword, verifyPassword, requireRole } = require("./auth");
 
 test("rising series projects upward and breaches danger", () => {
@@ -124,4 +125,23 @@ test("requireRole answers 401 when signed out and 403 for the wrong role", () =>
   assert.equal(run(null, ["admin"]), 401);
   assert.equal(run({ role: "viewer" }, ["admin", "officer"]), 403);
   assert.equal(run({ role: "officer" }, ["admin", "officer"]), 200);
+});
+
+test("simulator is reproducible from a seed, bounded, and responds to storms", () => {
+  const run = (seed, storm) => {
+    const zones = createZones();
+    const rng = seededRng(seed);
+    const out = [];
+    for (let t = 1; t <= 200; t++) {
+      if (storm && t === 50) injectStorm(zones, "velachery", 50);
+      stepZones(zones, t, rng);
+      out.push(zones.map((z) => z.level));
+    }
+    return out;
+  };
+  assert.deepEqual(run(42), run(42));
+  assert.notDeepEqual(run(42), run(43));
+  assert.ok(run(7).flat().every((v) => v >= 0 && v <= 100));
+  const vel = (rows) => rows[51][1];
+  assert.ok(vel(run(7, true)) > vel(run(7, false)) + 30);
 });

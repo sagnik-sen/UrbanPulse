@@ -6,6 +6,7 @@ const { planEvacuation, distanceKm } = require("./evacuation");
 const { openDb } = require("./db");
 const { randomUUID } = require("node:crypto");
 const { createAuth, attachUser, requireRole } = require("./auth");
+const { createZones, createShelters, stepZones, injectStorm } = require("./simulator");
 
 // served same-origin behind the Vite dev proxy, so no CORS: cross-site pages can't use the session cookie
 const app = express();
@@ -14,25 +15,10 @@ app.use(express.json());
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Fixed seed locations + a bounded oscillating simulation stand in for the real IoT feed.
-// Swap `tick()` for real sensor ingestion and forecast.js for the trained model when hardware/data exist.
-const LOCATIONS = [
-  { id: "pallikaranai", name: "Pallikaranai Marshland", lat: 12.9375, lng: 80.2119, base: 35, amplitude: 20, phase: 0, population: 185000 },
-  { id: "velachery", name: "Velachery", lat: 12.9756, lng: 80.2207, base: 40, amplitude: 22, phase: 5, population: 260000 },
-  { id: "omr", name: "OMR (Sholinganallur)", lat: 12.9010, lng: 80.2279, base: 30, amplitude: 18, phase: 10, population: 210000 },
-  { id: "tnagar", name: "T Nagar", lat: 13.0418, lng: 80.2341, base: 25, amplitude: 15, phase: 3, population: 240000 },
-  { id: "adyar", name: "Adyar", lat: 13.0012, lng: 80.2565, base: 28, amplitude: 16, phase: 8, population: 195000 },
-  { id: "mylapore", name: "Mylapore", lat: 13.0339, lng: 80.2619, base: 32, amplitude: 17, phase: 14, population: 170000 },
-].map((l) => ({ ...l, level: l.base, prevLevel: l.base, surge: 0, storm: 0, dangerTicks: 0 }));
-
-const SHELTERS = [
-  { id: "s1", name: "Corporation School, Velachery", zoneId: "velachery", lat: 12.9790, lng: 80.2180, capacity: 400, occupancy: 0 },
-  { id: "s2", name: "Community Hall, Adyar", zoneId: "adyar", lat: 13.0067, lng: 80.2520, capacity: 300, occupancy: 0 },
-  { id: "s3", name: "Govt. Hr. Sec. School, Sholinganallur", zoneId: "omr", lat: 12.9050, lng: 80.2330, capacity: 500, occupancy: 0 },
-  { id: "s4", name: "Kalyana Mandapam, T Nagar", zoneId: "tnagar", lat: 13.0380, lng: 80.2290, capacity: 350, occupancy: 0 },
-  { id: "s5", name: "Relief Centre, Mylapore", zoneId: "mylapore", lat: 13.0300, lng: 80.2680, capacity: 250, occupancy: 0 },
-  { id: "s6", name: "Marriage Hall, Medavakkam", zoneId: "pallikaranai", lat: 12.9200, lng: 80.1920, capacity: 300, occupancy: 0 },
-];
+// simulator.js stands in for the real IoT feed; swap stepZones() for sensor ingestion
+// and forecast.js for the trained model when hardware/data exist.
+const LOCATIONS = createZones();
+const SHELTERS = createShelters();
 
 const TEAMS = ["NDRF Battalion 4", "TN SDRF Unit 2", "GCC Rapid Response", "Fire & Rescue Services", "Chennai Traffic Police"];
 
@@ -163,16 +149,7 @@ function updateShelters() {
 
 function tick() {
   t += 1;
-  LOCATIONS.forEach((loc) => {
-    loc.prevLevel = loc.level;
-    // rare rain-burst event pushes level up; decays back down over following ticks
-    if (Math.random() < 0.008) loc.surge += 20 + Math.random() * 15;
-    loc.surge *= 0.9;
-    loc.storm *= 0.97; // injected storms linger ~1-2 min so there's time to respond in a demo
-    const oscillation = loc.base + loc.amplitude * Math.sin((t + loc.phase) / 12);
-    const noise = (Math.random() - 0.5) * 4;
-    loc.level = Math.max(0, Math.min(100, oscillation + noise + loc.surge + loc.storm));
-  });
+  stepZones(LOCATIONS, t, Math.random);
 
   const payload = currentSnapshot();
   payload.forEach((p) => {
@@ -229,7 +206,7 @@ app.put("/api/thresholds", requireRole("admin"), (req, res) => {
 app.post("/api/simulate/storm", requireRole("admin"), (req, res) => {
   const { zoneId, intensity } = req.body;
   const amount = Math.max(5, Math.min(60, Number(intensity) || 30));
-  LOCATIONS.filter((l) => zoneId === "all" || l.id === zoneId).forEach((l) => { l.storm += amount; });
+  injectStorm(LOCATIONS, zoneId, amount);
   res.json({ ok: true });
 });
 
