@@ -1,8 +1,8 @@
 # UrbanPulse Chennai — Flood Command Center (demo)
 
-Multi-page admin console for the status review. The sensor feed is simulated
-(stands in for IoT hardware) and the forecast is a rule-based extrapolation
-(stands in for the LSTM in the deck). Reports, incidents, broadcasts and
+Multi-page admin console for GCC staff plus a public citizen app. The sensor feed
+is simulated (stands in for IoT hardware) and the forecast is damped-trend
+exponential smoothing (stands in for the LSTM in the deck). Reports, incidents, broadcasts and
 thresholds are saved in SQLite (`demo/server/data/urbanpulse.db`) and survive
 restarts; clear them from Settings → Demo Data before a presentation.
 
@@ -33,6 +33,7 @@ Override the demo passwords with `UP_ADMIN_PASSWORD`, `UP_OFFICER_PASSWORD` and
 ## Pages
 
 - **Overview**: KPIs (active incidents, residents at risk, open reports, people sheltered), map, unified activity feed, "unassigned incident" banner
+- **Evacuation Planner**: pick zones (flooding ones are suggested) and a head count; it assigns every group to a shelter and road using the live forecast and optimal capacity-aware assignment, and compares that with a conventional current-conditions, first-come plan. Admins and officers can issue the plan as an evacuation order (holds shelter seats, alerts each zone, logs it on the incident)
 - **Live Map**: zones, relief shelters and citizen reports as toggleable layers with a legend. Map clicks either file a report or plan an evacuation (real road route to the best open shelter, steering around red danger rings)
 - **Sensor Grid / Zone Detail**: measured history plus a 2-hour forecast with a 95% band, projected peak, incidents, local reports, shelter occupancy, "Evacuation route" and "Simulate storm here"
 - **Incidents**: one incident per danger episode (auto-opens, auto-clears); dispatch a response team, expand a row for the timeline, add field notes, export CSV
@@ -53,9 +54,10 @@ Override the demo passwords with `UP_ADMIN_PASSWORD`, `UP_OFFICER_PASSWORD` and
 6. **Live Map**: click near Velachery, file a High-severity "Rescue needed" report. It shows on the map and a toast fires.
 7. **Relief Shelters**: occupancy climbing for the Velachery shelter.
 8. **Architecture**: "Layers 6–8 are prototyped here; sensors, MQTT and Kafka are the next phase."
-9. **Zone Detail → Velachery**: the forecast chart shows the spike and the projection draining back down. Click **Evacuation route** for the road route to a dry shelter.
-10. **Citizen app** (open it on your phone or in a narrow window): pick Velachery. It flips to "Flooding in your area" and shows the safe route automatically.
-11. After ~1 minute the level recedes and the incident auto-clears.
+9. **Evacuation Planner**: Velachery is suggested; set 600 people per zone, compare the proposed plan with the conventional one (shorter worst-case trip), then **Issue evacuation order**.
+10. **Zone Detail → Velachery**: the forecast chart shows the spike and the projection draining back down. Click **Evacuation route** for the road route to a dry shelter.
+11. **Citizen app** (open it on your phone or in a narrow window): pick Velachery. It flips to "Flooding in your area" and shows the safe route automatically.
+12. After ~1 minute the level recedes and the incident auto-clears.
 
 ## Tests
 
@@ -63,11 +65,24 @@ Override the demo passwords with `UP_ADMIN_PASSWORD`, `UP_OFFICER_PASSWORD` and
 cd demo/server && npm test
 ```
 
-Covers the forecast model (breach detection, post-storm recession, band width) and the evacuation planner (flood exposure, detours, avoiding shelters inside floods, offline fallback).
+Covers the forecast model, forecast-based flood risk, route scoring and detours, optimal
+shelter assignment (checked against brute force), the shared group planner, the seeded
+simulator, SQLite storage and sign-in/roles.
+
+## Evacuation experiment
+
+```bash
+cd demo/server && node experiments/run.js --seeds 200
+```
+
+Compares nine planning policies over 1,600 seeded flood scenarios on real road routes
+(`experiments/routes.json`, fetched once with `experiments/fetch-routes.js`) and writes
+`experiments/results/results.md`. Plans use only what is known at planning time and are
+scored against what the water actually did.
 
 ## Talking points
 
-- Swap `tick()` in `server/index.js` for real sensor ingestion and `server/forecast.js` for the trained LSTM once hardware/data exist. The rest of the app only reads the `forecast` path it returns
+- Swap `stepZones()` in `server/simulator.js` for real sensor ingestion and `server/forecast.js` for the trained LSTM once hardware/data exist. The rest of the app only reads the forecast path it returns
 - Forecast: damped-trend exponential smoothing with a drainage term and a robust (median-based) 95% band. Demo time runs at 1 s = 1 min
 - Routing: OSRM (public server) returns road routes; the planner adds detours around flooded zones, scores every candidate by drive time plus km through floodwater, and avoids shelters inside active floods. Falls back to a straight line if OSRM is unreachable. Needs internet, same as the map tiles
 - Incidents use hysteresis (clear only 10 points below danger) and a 4-second debounce so sensor noise doesn't spam alerts
