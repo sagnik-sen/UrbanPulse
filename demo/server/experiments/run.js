@@ -15,8 +15,8 @@ const path = require("node:path");
 const { createZones, createShelters, stepZones, injectStorm, seededRng } = require("../simulator");
 const { forecast } = require("../forecast");
 const { snapshotRisk, forecastRisk, oracleRisk, distanceKm } = require("../risk");
-const { routeExposure, score } = require("../evacuation");
-const { assignEvacuees, assignGreedyNearest } = require("../assignment");
+const { routeExposure } = require("../evacuation");
+const { planGroups, shifted } = require("../planner");
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => (a.startsWith("--") ? [...acc, [a.slice(2), all[i + 1]]] : acc), []));
 const SEEDS = Number(args.seeds) || 200;
@@ -48,8 +48,6 @@ const shuffle = (rng, arr) => {
   return a;
 };
 const between = (rng, lo, hi) => lo + rng() * (hi - lo);
-// a group leaving `delay` minutes after t0 experiences the risk model shifted by that delay
-const shifted = (risk, delay) => ({ at: (p, m) => risk.at(p, m + delay) });
 
 function buildScenario(seed, type) {
   const rng = seededRng(seed * 7919 + SCENARIO_TYPES.indexOf(type));
@@ -106,15 +104,6 @@ function withDepartures(sc, mode) {
   return { ...sc, mode, groups: sc.groups.map((g, i) => ({ ...g, delay: mode === "staggered" ? sc.staggered[i] : 0 })) };
 }
 
-function bestRoute(group, shelter, risk) {
-  let best = null;
-  for (const r of routeSet.routes[`${group.origin.id}|${shelter.id}`] || []) {
-    const s = score(r, shelter, shifted(risk, group.delay), {});
-    if (!best || s.cost < best.cost) best = s;
-  }
-  return best;
-}
-
 const POLICIES = {
   nearest: { label: "Nearest shelter", assign: "none" },
   snapshot: { label: "Avoid current floods", risk: "snapshot", assign: "independent" },
@@ -129,10 +118,9 @@ const POLICIES = {
 
 function plan(policyKey, sc) {
   const policy = POLICIES[policyKey];
-  const open = sc.shelters.filter((s) => s.capacity - s.occupancy > 0);
-  const out = [];
-
   if (policy.assign === "none") {
+    const open = sc.shelters.filter((s) => s.capacity - s.occupancy > 0);
+    const out = [];
     for (const g of sc.groups) {
       const shelter = [...open].sort((a, b) => distanceKm(g.origin, a) - distanceKm(g.origin, b))[0];
       const route = routeSet.routes[`${g.origin.id}|${shelter.id}`].reduce((a, b) => (b.durationMin < a.durationMin ? b : a));
@@ -148,32 +136,14 @@ function plan(policyKey, sc) {
     oracle: () => oracleRisk(sc.planningView, sc.actual, DANGER, SIM_MIN_PER_TICK),
   }[policy.risk]();
 
-  const routes = {};
-  for (const g of sc.groups) for (const s of open) routes[`${g.origin.id}|${s.id}`] = bestRoute(g, s, risk);
-
-  if (policy.assign === "independent") {
-    // each group decides on its own, seeing only which shelters had beds at t0
-    for (const g of sc.groups) {
-      let best = null;
-      for (const s of open) {
-        const r = routes[`${g.origin.id}|${s.id}`];
-        if (r && (!best || r.cost < best.route.cost)) best = { shelter: s, route: r };
-      }
-      out.push({ group: g, shelter: best.shelter, route: best.route, people: g.people });
-    }
-    return { assignments: out, unassigned: 0 };
-  }
-
-  const problem = {
-    sources: (policy.assign === "greedy" ? sc.order.map((i) => sc.groups[i]) : sc.groups).map((g) => ({ id: g.origin.id, people: g.people })),
-    sinks: open.map((s) => ({ id: s.id, beds: s.capacity - s.occupancy })),
-    cost: (o, s) => routes[`${o}|${s}`]?.cost ?? Infinity,
-  };
-  const result = policy.assign === "greedy" ? assignGreedyNearest(problem) : assignEvacuees(problem);
-  for (const f of result.flows) {
-    out.push({ group: sc.groups.find((g) => g.origin.id === f.source), shelter: open.find((s) => s.id === f.sink), route: routes[`${f.source}|${f.sink}`], people: f.people });
-  }
-  return { assignments: out, unassigned: result.unassigned.reduce((s, u) => s + u.people, 0) };
+  return planGroups({
+    groups: sc.groups,
+    shelters: sc.shelters,
+    candidatesFor: (o, sh) => routeSet.routes[`${o}|${sh}`],
+    risk,
+    method: policy.assign,
+    order: sc.order,
+  });
 }
 
 function evaluate(sc, { assignments, unassigned }) {

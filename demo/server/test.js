@@ -4,6 +4,7 @@ const { forecast, stepsToBreach } = require("./forecast");
 const { planEvacuation, routeExposure } = require("./evacuation");
 const { snapshotRisk, forecastRisk, levelDistribution } = require("./risk");
 const { assignEvacuees, assignGreedyNearest } = require("./assignment");
+const { planGroups } = require("./planner");
 const { openDb } = require("./db");
 const { createZones, stepZones, injectStorm, seededRng } = require("./simulator");
 const { createAuth, hashPassword, verifyPassword, requireRole } = require("./auth");
@@ -245,4 +246,26 @@ test("assignment is optimal on random instances (checked against brute force)", 
     assert.equal(r.assigned, best.flow, `trial ${trial} flow`);
     assert.equal(r.totalCost, best.cost, `trial ${trial} cost`);
   }
+});
+
+test("group planner respects held seats and shelter capacity under every method", () => {
+  const origin = (id, lat) => ({ id, lat, lng: 80.2 });
+  const groups = [{ origin: origin("a", 12.95), people: 60 }, { origin: origin("b", 12.96), people: 60 }];
+  const shelters = [
+    { id: "near", lat: 12.97, lng: 80.2, capacity: 100, occupancy: 0 },
+    { id: "far", lat: 13.05, lng: 80.2, capacity: 100, occupancy: 0 },
+  ];
+  const route = (o, s) => [{ coords: [[o.lat, o.lng], [s.lat, s.lng]], distanceKm: 1, durationMin: s.id === "near" ? 3 : 12 }];
+  const candidatesFor = (o, s) => route(groups.find((g) => g.origin.id === o).origin, shelters.find((x) => x.id === s));
+  const risk = snapshotRisk([]);
+  const load = (plan, id) => plan.assignments.filter((a) => a.shelter.id === id).reduce((s, a) => s + a.people, 0);
+
+  for (const method of ["greedy", "optimal"]) {
+    const plan = planGroups({ groups, shelters, candidatesFor, risk, method, reserved: { near: 30 } });
+    assert.ok(load(plan, "near") <= 70, `${method}: held seats reduce free beds`);
+    assert.equal(plan.unassigned, 0);
+    assert.equal(load(plan, "near") + load(plan, "far"), 120);
+  }
+  const independent = planGroups({ groups, shelters, candidatesFor, risk, method: "independent" });
+  assert.equal(load(independent, "near"), 120, "independent ignores other groups and overfills the nearest shelter");
 });
