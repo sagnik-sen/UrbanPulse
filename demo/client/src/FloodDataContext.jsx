@@ -137,6 +137,8 @@ export function FloodDataProvider({ children }) {
     updateThresholds: (next) => call(api("/api/thresholds", "PUT", next)).then(setThresholds),
     planEvacuation,
     clearDemoData: () => call(api("/api/admin/clear-data", "POST", {})),
+    buildEvacuationPlan: (body) => call(api("/api/evacuation-plan", "POST", body)),
+    issueEvacuationOrder: (body) => call(api("/api/evacuation-plan/execute", "POST", body)),
   };
 
   return <FloodDataContext.Provider value={value}>{children}</FloodDataContext.Provider>;

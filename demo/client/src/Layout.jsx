@@ -23,6 +23,7 @@ export default function Layout() {
   const nav = [
     { to: "/", label: "Overview", end: true },
     { to: "/map", label: "Live Map" },
+    { to: "/planner", label: "Evacuation Planner" },
     { to: "/sensors", label: "Sensor Grid" },
     { to: "/incidents", label: "Incidents", badge: activeIncidents, badgeKind: "danger" },
     { to: "/reports", label: "Citizen Reports", badge: openReports, badgeKind: "warning" },

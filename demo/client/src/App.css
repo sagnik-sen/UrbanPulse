@@ -335,3 +335,23 @@ a.feed-item:hover { background: #1c1c1a; }
 .demo-account { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; background: #141414; border: 1px solid #2c2c2a; border-radius: 8px; padding: 8px 10px; color: #fff; font-size: 12.5px; cursor: pointer; }
 .demo-account:hover { border-color: #3987e5; }
 .demo-account:focus-visible { outline: 2px solid #3987e5; outline-offset: 2px; }
+
+/* Evacuation planner */
+.planner-controls { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.zone-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.zone-chip { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid #2c2c2a; border-radius: 18px; font-size: 12.5px; color: #c3c2b7; cursor: pointer; }
+.zone-chip input { position: absolute; opacity: 0; pointer-events: none; }
+.zone-chip.on { border-color: #3987e5; background: #16233a; color: #fff; }
+.zone-chip:focus-within { outline: 2px solid #3987e5; outline-offset: 2px; }
+.suggest-tag { font-size: 9.5px; font-weight: 700; text-transform: uppercase; background: #3a2f10; color: #fab219; border-radius: 4px; padding: 1px 5px; margin-left: 4px; }
+.suggest-tag.danger { background: #3a1414; color: #ff9b9b; }
+.plan-card { margin-bottom: 0; }
+.plan-card.highlight { border-color: #3987e5; }
+.metric-table { width: 100%; border-collapse: collapse; }
+.metric-table td { padding: 7px 0; border-bottom: 1px solid #202020; }
+.metric-table tr:last-child td { border-bottom: none; }
+.metric-val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.metric-val.better { color: #5fd35f; }
+.beds-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; margin-top: 18px; padding-top: 16px; border-top: 1px solid #2c2c2a; }
+.beds-item { display: flex; flex-direction: column; gap: 5px; }
+.info-banner { background: #0f1f0f; border: 1px solid #1f4d1f; color: #8fe08f; padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; line-height: 1.5; }

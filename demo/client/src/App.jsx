@@ -16,6 +16,7 @@ import Analytics from "./pages/Analytics";
 import Architecture from "./pages/Architecture";
 import Settings from "./pages/Settings";
 import Citizen from "./pages/Citizen";
+import Planner from "./pages/Planner";
 import "./App.css";
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
             <Route element={<RequireAuth><Layout /></RequireAuth>}>
               <Route index element={<Overview />} />
               <Route path="map" element={<LiveMap />} />
+              <Route path="planner" element={<Planner />} />
               <Route path="sensors" element={<SensorGrid />} />
               <Route path="sensors/:id" element={<ZoneDetail />} />
               <Route path="incidents" element={<Incidents />} />

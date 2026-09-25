@@ -3,7 +3,11 @@ const http = require("http");
 const { Server } = require("socket.io");
 const { forecast, stepsToBreach } = require("./forecast");
 const { planEvacuation, distanceKm } = require("./evacuation");
-const { forecastRisk } = require("./risk");
+const { forecastRisk, snapshotRisk } = require("./risk");
+const { routeExposure } = require("./evacuation");
+const { planGroups } = require("./planner");
+const fs = require("node:fs");
+const path = require("node:path");
 const { openDb } = require("./db");
 const { randomUUID } = require("node:crypto");
 const { createAuth, attachUser, requireRole } = require("./auth");
@@ -357,6 +361,143 @@ app.get("/api/evacuation-route", async (req, res) => {
   routeCache.set(key, { at: Date.now(), plan: body });
   for (const [k, v] of routeCache) if (Date.now() - v.at > ROUTE_CACHE_MS) routeCache.delete(k);
   res.json(body);
+});
+
+// ---- Group evacuation planner -------------------------------------------------
+// Uses the precomputed road-route set (3 start points per zone to every shelter), so planning
+// a whole zone costs no live routing calls. Proposed = forecast-aware costs + optimal assignment;
+// conventional = current-conditions costs + one-group-at-a-time (greedy) assignment.
+const ROUTE_SET = JSON.parse(fs.readFileSync(path.join(__dirname, "experiments", "routes.json"), "utf8"));
+const EVAC_ORDER_HOLD_MS = 10 * 60 * 1000;
+const SUGGEST_WITHIN_HOURS = 0.5;
+
+function suggestedZones(zones) {
+  return zones
+    .filter((z) => z.risk === "danger" || (z.forecastHours != null && z.forecastHours <= SUGGEST_WITHIN_HOURS))
+    .map((z) => z.id);
+}
+
+function parsePlanRequest(body, zones) {
+  const known = new Set(zones.map((z) => z.id));
+  const requested = Array.isArray(body?.zoneIds) ? body.zoneIds.filter((id) => known.has(id)) : [];
+  const zoneIds = requested.length ? [...new Set(requested)] : suggestedZones(zones);
+  const people = Math.round(Number(body?.peoplePerZone));
+  const peoplePerZone = Number.isFinite(people) ? Math.max(50, Math.min(2000, people)) : 300;
+  return { zoneIds, peoplePerZone };
+}
+
+function summarizePlan(result, zones, groups, evalRisk) {
+  const total = groups.reduce((s, g) => s + g.people, 0);
+  const assigned = total - result.unassigned;
+  let travel = 0;
+  let worst = 0;
+  let floodKm = 0;
+  let atRiskShelter = 0;
+  const loads = {};
+  const assignments = result.assignments.map((a) => {
+    const expectedFloodKm = routeExposure(a.route, evalRisk).expectedFloodKm;
+    const shelterAtRisk = evalRisk.at(a.shelter, a.route.durationMin).p >= 0.5;
+    travel += a.route.durationMin * a.people;
+    worst = Math.max(worst, a.route.durationMin);
+    floodKm += expectedFloodKm * a.people;
+    if (shelterAtRisk) atRiskShelter += a.people;
+    loads[a.shelter.id] = (loads[a.shelter.id] || 0) + a.people;
+    const zone = zones.find((z) => z.id === a.group.origin.zoneId);
+    return {
+      zoneId: zone.id,
+      zoneName: zone.name,
+      originId: a.group.origin.id,
+      from: { lat: a.group.origin.lat, lng: a.group.origin.lng },
+      shelterId: a.shelter.id,
+      shelterName: a.shelter.name,
+      people: a.people,
+      durationMin: Math.round(a.route.durationMin * 10) / 10,
+      distanceKm: Math.round(a.route.distanceKm * 10) / 10,
+      expectedFloodKm: Math.round(expectedFloodKm * 100) / 100,
+      shelterAtRisk,
+      coords: a.route.coords,
+    };
+  });
+  return {
+    metrics: {
+      evacuees: total,
+      assigned,
+      unassigned: result.unassigned,
+      meanTravelMin: assigned ? Math.round((travel / assigned) * 10) / 10 : 0,
+      worstTravelMin: Math.round(worst * 10) / 10,
+      floodKmPerEvacuee: total ? Math.round((floodKm / total) * 1000) / 1000 : 0,
+      pctToAtRiskShelter: total ? Math.round((1000 * atRiskShelter) / total) / 10 : 0,
+    },
+    shelterLoads: SHELTERS.filter((s) => loads[s.id]).map((s) => ({ id: s.id, name: s.name, arriving: loads[s.id] })),
+    assignments,
+  };
+}
+
+function buildEvacuationPlans({ zoneIds, peoplePerZone }) {
+  const zones = currentSnapshot();
+  const reserved = reservedByShelter();
+  const groups = [];
+  for (const zoneId of zoneIds) {
+    const origins = ROUTE_SET.origins.filter((o) => o.zoneId === zoneId);
+    origins.forEach((o, i) => groups.push({ origin: o, people: Math.floor(peoplePerZone / origins.length) + (i < peoplePerZone % origins.length ? 1 : 0) }));
+  }
+  const candidatesFor = (o, sh) => ROUTE_SET.routes[`${o}|${sh}`];
+  const fc = forecastRisk(zones, thresholds.danger, SIM_MIN_PER_TICK);
+  const common = { groups, shelters: SHELTERS, candidatesFor, reserved };
+  const proposed = planGroups({ ...common, risk: fc, method: "optimal" });
+  const conventional = planGroups({ ...common, risk: snapshotRisk(zones), method: "greedy", order: groups.map((_, i) => i) });
+
+  return {
+    generatedAt: Date.now(),
+    zoneIds,
+    peoplePerZone,
+    suggestedZoneIds: suggestedZones(zones),
+    freeBeds: SHELTERS.map((s) => ({ id: s.id, name: s.name, free: Math.max(0, s.capacity - s.occupancy - (reserved[s.id] || 0)), capacity: s.capacity })),
+    // both plans are judged by the same live forecast, so the comparison is like-for-like
+    proposed: summarizePlan(proposed, zones, groups, fc),
+    conventional: summarizePlan(conventional, zones, groups, fc),
+  };
+}
+
+app.post("/api/evacuation-plan", requireRole(...STAFF), (req, res) => {
+  const request = parsePlanRequest(req.body, currentSnapshot());
+  res.json(buildEvacuationPlans(request));
+});
+
+app.post("/api/evacuation-plan/execute", requireRole(...RESPONDERS), (req, res) => {
+  const request = parsePlanRequest(req.body, currentSnapshot());
+  if (request.zoneIds.length === 0) return res.status(400).json({ error: "No zones to evacuate" });
+  const plan = buildEvacuationPlans(request).proposed;
+  if (plan.assignments.length === 0) return res.status(409).json({ error: "No shelter capacity available" });
+
+  const expiresAt = Date.now() + EVAC_ORDER_HOLD_MS;
+  for (const load of plan.shelterLoads) reservations.push({ shelterId: load.id, people: load.arriving, expiresAt });
+
+  for (const zoneId of request.zoneIds) {
+    const rows = plan.assignments.filter((a) => a.zoneId === zoneId);
+    if (rows.length === 0) continue;
+    const byShelter = {};
+    for (const r of rows) byShelter[r.shelterName] = (byShelter[r.shelterName] || 0) + r.people;
+    const zoneName = rows[0].zoneName;
+    const targets = Object.keys(byShelter).join(" or ");
+    addBroadcast({
+      zoneId,
+      severity: "danger",
+      message: `EVACUATION ORDER for ${zoneName}: proceed now to ${targets}. Follow the route in the UrbanPulse app and avoid flooded roads.`.slice(0, 300),
+      channels: ["sms", "push", "siren"],
+      source: "manual",
+    });
+    const inc = incidents.find((i) => i.zoneId === zoneId && i.status !== "cleared");
+    if (inc) {
+      const summary = Object.entries(byShelter).map(([name, n]) => `${n} → ${name}`).join(", ");
+      inc.log.push({ ts: Date.now(), text: `Evacuation order issued by ${req.user.name}: ${summary}` });
+      saveIncident(inc);
+      toStaff("incident-updated", inc);
+    }
+  }
+
+  const unassigned = plan.metrics.unassigned;
+  res.json({ ok: true, heldSeats: plan.metrics.assigned, unassigned, zones: request.zoneIds.length });
 });
 
 const PORT = 4000;
