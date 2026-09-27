@@ -321,3 +321,14 @@ test("rainfall feed keeps the last good reading when a refresh fails", async () 
   assert.equal(feed.get().error, "offline");
   assert.equal(feed.get().zones.a.currentMmPerHr, 2, "old reading kept");
 });
+
+test("audit log is newest-first, filterable, capped, and survives clearing demo data", () => {
+  const db = openDb(":memory:");
+  for (let i = 1; i <= 5; i++) db.logAudit({ id: `e${i}`, ts: i, username: "admin", role: "admin", action: i % 2 ? "login" : "broadcast_sent", details: { n: i } }, 4);
+  const all = db.listAudit();
+  assert.deepEqual(all.map((e) => e.id), ["e5", "e4", "e3", "e2"], "oldest pruned past the cap");
+  assert.deepEqual(all[0].details, { n: 5 });
+  assert.deepEqual(db.listAudit({ action: "broadcast_sent" }).map((e) => e.id), ["e4", "e2"]);
+  db.clearRecords();
+  assert.equal(db.listAudit().length, 4);
+});

@@ -37,11 +37,20 @@ const RESPONDERS = ["admin", "officer"];
 const STAFF_ROOM = "staff";
 
 // staff sockets join a room; incident and report events (reporter names, dispatch) only go there
+const ADMIN_ROOM = "admins";
 io.on("connection", (socket) => {
   const user = auth.userFromCookieHeader(socket.handshake.headers.cookie);
   if (user) socket.join(STAFF_ROOM);
+  if (user?.role === "admin") socket.join(ADMIN_ROOM);
 });
 const toStaff = (event, payload) => io.to(STAFF_ROOM).emit(event, payload);
+
+// who did what, when; admins see it live on the Audit Log page
+function audit(user, action, details = {}) {
+  const entry = { id: randomUUID(), ts: Date.now(), username: user?.username ?? null, role: user?.role ?? null, action, details };
+  db.logAudit(entry);
+  io.to(ADMIN_ROOM).emit("audit-entry", entry);
+}
 const DEFAULT_THRESHOLDS = { warning: 40, danger: 70 };
 let thresholds = db.getSetting("thresholds", DEFAULT_THRESHOLDS);
 
@@ -194,12 +203,17 @@ setInterval(refreshRainfall, RAIN_REFRESH_MS);
 app.post("/api/auth/login", (req, res) => {
   const { username, password } = req.body || {};
   const result = auth.login(username, password);
-  if (result.error) return res.status(result.status).json({ error: result.error });
+  if (result.error) {
+    audit(null, result.status === 429 ? "login_locked" : "login_failed", { username: String(username ?? "").slice(0, 40), ip: req.ip });
+    return res.status(result.status).json({ error: result.error });
+  }
+  audit(result.user, "login", { ip: req.ip });
   res.setHeader("Set-Cookie", auth.sessionCookie(result.token));
   res.json(result.user);
 });
 
 app.post("/api/auth/logout", (req, res) => {
+  if (req.user) audit(req.user, "logout");
   auth.logout(req.headers.cookie);
   res.setHeader("Set-Cookie", auth.clearedCookie());
   res.json({ ok: true });
@@ -222,6 +236,7 @@ app.get("/api/state", requireRole(...STAFF), (req, res) => {
 app.put("/api/thresholds", requireRole("admin"), (req, res) => {
   const { warning, danger } = req.body;
   if (typeof warning === "number" && typeof danger === "number" && warning < danger) {
+    if (warning !== thresholds.warning || danger !== thresholds.danger) audit(req.user, "thresholds_changed", { from: thresholds, to: { warning, danger } });
     thresholds = { warning, danger };
     db.setSetting("thresholds", thresholds);
     io.emit("thresholds-updated", thresholds);
@@ -233,6 +248,7 @@ app.put("/api/settings/rain-link", requireRole("admin"), (req, res) => {
   if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ error: "enabled must be true or false" });
   rainLink = req.body.enabled;
   db.setSetting("rainLink", rainLink);
+  audit(req.user, "rain_link", { enabled: rainLink });
   io.emit("rain-link-updated", { rainLink });
   res.json({ rainLink });
 });
@@ -241,6 +257,7 @@ app.post("/api/simulate/storm", requireRole("admin"), (req, res) => {
   const { zoneId, intensity } = req.body;
   const amount = Math.max(5, Math.min(60, Number(intensity) || 30));
   injectStorm(LOCATIONS, zoneId, amount);
+  audit(req.user, "storm_simulated", { zoneId, intensity: amount });
   res.json({ ok: true });
 });
 
@@ -276,7 +293,10 @@ app.post("/api/citizen-report", (req, res) => {
 app.patch("/api/citizen-report/:id", requireRole(...RESPONDERS), (req, res) => {
   const report = citizenReports.find((r) => r.id === req.params.id);
   if (!report) return res.status(404).json({ error: "not found" });
-  if (["open", "in_progress", "resolved"].includes(req.body.status)) report.status = req.body.status;
+  if (["open", "in_progress", "resolved"].includes(req.body.status) && req.body.status !== report.status) {
+    audit(req.user, "report_status", { reportId: report.id, zone: report.zoneName, from: report.status, to: req.body.status });
+    report.status = req.body.status;
+  }
   saveReport(report);
   toStaff("report-updated", report);
   res.json(report);
@@ -290,8 +310,12 @@ app.patch("/api/incidents/:id", requireRole(...RESPONDERS), (req, res) => {
     inc.team = team;
     if (inc.status === "active") inc.status = "responding";
     inc.log.push({ ts: Date.now(), text: `${team} dispatched by ${req.user.name}` });
+    audit(req.user, "team_dispatched", { incidentId: inc.id, zone: inc.zoneName, team });
   }
-  if (note && String(note).trim()) inc.log.push({ ts: Date.now(), text: `${req.user.name}: ${String(note).slice(0, 200)}` });
+  if (note && String(note).trim()) {
+    inc.log.push({ ts: Date.now(), text: `${req.user.name}: ${String(note).slice(0, 200)}` });
+    audit(req.user, "incident_note", { incidentId: inc.id, zone: inc.zoneName, note: String(note).slice(0, 200) });
+  }
   saveIncident(inc);
   toStaff("incident-updated", inc);
   res.json(inc);
@@ -302,7 +326,9 @@ app.post("/api/broadcasts", requireRole("admin"), (req, res) => {
   if (!message || !String(message).trim()) return res.status(400).json({ error: "message required" });
   const valid = ["sms", "push", "siren"].filter((c) => Array.isArray(channels) && channels.includes(c));
   if (valid.length === 0) return res.status(400).json({ error: "pick at least one channel" });
-  res.json(addBroadcast({ zoneId: zoneId || "all", severity: severity || "info", message: String(message).slice(0, 300), channels: valid, source: "manual" }));
+  const b = addBroadcast({ zoneId: zoneId || "all", severity: severity || "info", message: String(message).slice(0, 300), channels: valid, source: "manual" });
+  audit(req.user, "broadcast_sent", { zone: b.zoneName, severity: b.severity, channels: b.channels, recipients: b.recipients, message: b.message });
+  res.json(b);
 });
 
 // wipes reports, incidents and broadcasts (they persist across restarts now, so test runs pile up)
@@ -314,6 +340,7 @@ app.post("/api/admin/clear-data", requireRole("admin"), (req, res) => {
   thresholds = { ...DEFAULT_THRESHOLDS };
   db.setSetting("thresholds", thresholds);
   io.emit("data-cleared", { thresholds });
+  audit(req.user, "demo_data_cleared");
   res.json({ ok: true });
 });
 
@@ -526,7 +553,22 @@ app.post("/api/evacuation-plan/execute", requireRole(...RESPONDERS), (req, res) 
   }
 
   const unassigned = plan.metrics.unassigned;
+  audit(req.user, "evacuation_order", {
+    zones: request.zoneIds,
+    peoplePerZone: request.peoplePerZone,
+    heldSeats: plan.metrics.assigned,
+    unassigned,
+    shelters: plan.shelterLoads.map((l) => `${l.arriving} → ${l.name}`),
+  });
   res.json({ ok: true, heldSeats: plan.metrics.assigned, unassigned, zones: request.zoneIds.length });
+});
+
+const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link"]);
+
+app.get("/api/audit", requireRole("admin"), (req, res) => {
+  const action = AUDIT_ACTIONS.has(req.query.action) ? req.query.action : undefined;
+  const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 500));
+  res.json(db.listAudit({ action, limit }));
 });
 
 const PORT = 4000;

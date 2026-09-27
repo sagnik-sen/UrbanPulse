@@ -31,6 +31,7 @@ export default function Layout() {
     { to: "/shelters", label: "Relief Shelters" },
     { to: "/analytics", label: "Analytics" },
     { to: "/architecture", label: "Architecture" },
+    can.manage && { to: "/audit", label: "Audit Log" },
     can.manage && { to: "/settings", label: "Settings" },
   ].filter(Boolean);
 

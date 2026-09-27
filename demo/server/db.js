@@ -22,6 +22,15 @@ function openDb(file = path.join(DATA_DIR, "urbanpulse.db")) {
       role TEXT NOT NULL CHECK (role IN ('admin', 'officer', 'viewer')),
       password_hash TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS audit (
+      id TEXT PRIMARY KEY,
+      ts INTEGER NOT NULL,
+      username TEXT,
+      role TEXT,
+      action TEXT NOT NULL,
+      details TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS audit_ts ON audit (ts DESC);
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -48,6 +57,19 @@ function openDb(file = path.join(DATA_DIR, "urbanpulse.db")) {
     },
     clearRecords() {
       db.exec("DELETE FROM reports; DELETE FROM incidents; DELETE FROM broadcasts;");
+    },
+
+    // audit trail survives "clear demo data" on purpose; only the oldest entries past the cap are pruned
+    logAudit({ id, ts, username, role, action, details }, keep = 2000) {
+      db.prepare("INSERT INTO audit (id, ts, username, role, action, details) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(id, ts, username ?? null, role ?? null, action, JSON.stringify(details ?? {}));
+      db.prepare("DELETE FROM audit WHERE id NOT IN (SELECT id FROM audit ORDER BY ts DESC LIMIT ?)").run(keep);
+    },
+    listAudit({ action, limit = 500 } = {}) {
+      const rows = action
+        ? db.prepare("SELECT * FROM audit WHERE action = ? ORDER BY ts DESC LIMIT ?").all(action, limit)
+        : db.prepare("SELECT * FROM audit ORDER BY ts DESC LIMIT ?").all(limit);
+      return rows.map((r) => ({ ...r, details: JSON.parse(r.details) }));
     },
 
     getSetting(key, fallback) {

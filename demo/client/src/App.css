@@ -363,3 +363,10 @@ a.feed-item:hover { background: #1c1c1a; }
 .rain-total { color: #7fb2f0; }
 .c-rain { font-size: 13px; color: #9fc4f2; margin: 10px 0 0; }
 @media (max-width: 1100px) { .rain-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* Audit log */
+.audit-tag { font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 10px; white-space: nowrap; background: #2c2c2a; color: #c3c2b7; }
+.audit-tag.info { background: #16233a; color: #7fb2f0; }
+.audit-tag.warn { background: #3a2f10; color: #fab219; }
+.audit-tag.danger { background: #3a1414; color: #ff9b9b; }
+.audit-details { font-size: 12.5px; line-height: 1.45; max-width: 560px; }

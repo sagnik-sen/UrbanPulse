@@ -17,6 +17,7 @@ import Architecture from "./pages/Architecture";
 import Settings from "./pages/Settings";
 import Citizen from "./pages/Citizen";
 import Planner from "./pages/Planner";
+import Audit from "./pages/Audit";
 import "./App.css";
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
               <Route path="analytics" element={<Analytics />} />
               <Route path="architecture" element={<Architecture />} />
               <Route path="settings" element={<RequireAuth roles={["admin"]}><Settings /></RequireAuth>} />
+              <Route path="audit" element={<RequireAuth roles={["admin"]}><Audit /></RequireAuth>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

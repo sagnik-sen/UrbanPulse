@@ -47,6 +47,7 @@ Override the demo passwords with `UP_ADMIN_PASSWORD`, `UP_OFFICER_PASSWORD` and
 - **Relief Shelters**: capacity and live occupancy (rises while the linked zone has an active incident)
 - **Citizen app** (`/citizen`, also linked from the sidebar): mobile-first public view with area status in plain language, the forecast, an automatic safe route when your area floods, official alerts, the report form and tap-to-call emergency numbers
 - **Live rainfall**: real per-zone rain on the Overview, an hourly 24 h rain chart on Zone Detail, a rain line on sensor cards and in the citizen app
+- **Audit Log** (admin): every staff action and sign-in attempt (thresholds, storms, dispatches, notes, report status, broadcasts, evacuation orders, rain link, failed/locked sign-ins), live, searchable, exportable as CSV. It is kept when demo data is cleared
 - **Analytics**, **Architecture** (8-layer diagram marking what's prototyped), **Settings** (live thresholds + Storm Simulator)
 
 ## Demo script (about 3 minutes)
@@ -94,4 +95,5 @@ scored against what the water actually did.
 - Incidents use hysteresis (clear only 10 points below danger) and a 4-second debounce so sensor noise doesn't spam alerts
 - Thresholds are live and global: changing them re-classifies every zone in real time
 - Security: staff sign-in with scrypt-hashed passwords, database-backed sessions in an httpOnly cookie, lockout after 10 failed attempts. Roles are enforced on the server (the UI just hides what you can't use). The citizen app reads a separate public endpoint with no reporter names or dispatch details
+- Accountability: an audit trail in SQLite records who did what and when; it survives "clear demo data" and keeps the latest 2,000 entries
 - Persistence: Node's built-in SQLite, write-through from the in-memory working set, no native dependencies

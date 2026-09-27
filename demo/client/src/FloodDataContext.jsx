@@ -43,6 +43,7 @@ export function FloodDataProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const [rainfall, setRainfall] = useState(null);
   const [rainLink, setRainLinkState] = useState(true);
+  const [liveAudit, setLiveAudit] = useState([]); // pushed only to admins' sockets
 
   const pushToast = useCallback((toast) => {
     const id = Date.now() + Math.random();
@@ -114,6 +115,8 @@ export function FloodDataProvider({ children }) {
     socket.on("shelters-update", setShelters);
     socket.on("thresholds-updated", setThresholds);
     socket.on("rainfall-update", setRainfall);
+    setLiveAudit([]);
+    socket.on("audit-entry", (e) => setLiveAudit((prev) => [e, ...prev].slice(0, 200)));
     socket.on("rain-link-updated", ({ rainLink: on }) => setRainLinkState(on));
     socket.on("data-cleared", ({ thresholds: t }) => {
       setIncidents([]);
@@ -132,7 +135,7 @@ export function FloodDataProvider({ children }) {
   });
 
   const value = {
-    locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts, rainfall, rainLink,
+    locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts, rainfall, rainLink, liveAudit,
     pushToast,
     dismissToast,
     submitReport: (body) => api("/api/citizen-report", "POST", body),
@@ -144,6 +147,11 @@ export function FloodDataProvider({ children }) {
     planEvacuation,
     clearDemoData: () => call(api("/api/admin/clear-data", "POST", {})),
     setRainLink: (enabled) => call(api("/api/settings/rain-link", "PUT", { enabled })).then((r) => setRainLinkState(r.rainLink)),
+    fetchAudit: (action) => call(fetch(`${SERVER_URL}/api/audit?limit=500${action ? `&action=${encodeURIComponent(action)}` : ""}`).then(async (r) => {
+      const data = await r.json();
+      if (!r.ok) throw Object.assign(new Error(data.error || "Request failed"), { status: r.status });
+      return data;
+    })),
     buildEvacuationPlan: (body) => call(api("/api/evacuation-plan", "POST", body)),
     issueEvacuationOrder: (body) => call(api("/api/evacuation-plan/execute", "POST", body)),
   };
