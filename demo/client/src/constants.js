@@ -71,3 +71,17 @@ export function downloadCsv(filename, rows) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// IMD-style hourly rainfall bands (mm/h); mirrors server/rainfall.js
+export function rainLabel(mmPerHr) {
+  if (!mmPerHr || mmPerHr <= 0) return "No rain";
+  if (mmPerHr < 2.5) return "Light rain";
+  if (mmPerHr < 7.6) return "Moderate rain";
+  if (mmPerHr < 35) return "Heavy rain";
+  return "Very heavy rain";
+}
+
+export function hourLabel(isoLocal) {
+  const h = Number(String(isoLocal).slice(11, 13));
+  return `${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
+}

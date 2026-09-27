@@ -41,6 +41,8 @@ export function FloodDataProvider({ children }) {
   const [thresholds, setThresholds] = useState({ warning: 40, danger: 70 });
   const [connected, setConnected] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [rainfall, setRainfall] = useState(null);
+  const [rainLink, setRainLinkState] = useState(true);
 
   const pushToast = useCallback((toast) => {
     const id = Date.now() + Math.random();
@@ -68,6 +70,8 @@ export function FloodDataProvider({ children }) {
         setShelters(s.shelters);
         setTeams(s.teams ?? []);
         setThresholds(s.thresholds);
+        setRainfall(s.rainfall ?? null);
+        setRainLinkState(s.rainLink ?? true);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -109,6 +113,8 @@ export function FloodDataProvider({ children }) {
     socket.on("broadcast", upsert(setBroadcasts));
     socket.on("shelters-update", setShelters);
     socket.on("thresholds-updated", setThresholds);
+    socket.on("rainfall-update", setRainfall);
+    socket.on("rain-link-updated", ({ rainLink: on }) => setRainLinkState(on));
     socket.on("data-cleared", ({ thresholds: t }) => {
       setIncidents([]);
       setReports([]);
@@ -126,7 +132,7 @@ export function FloodDataProvider({ children }) {
   });
 
   const value = {
-    locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts,
+    locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts, rainfall, rainLink,
     pushToast,
     dismissToast,
     submitReport: (body) => api("/api/citizen-report", "POST", body),
@@ -137,6 +143,7 @@ export function FloodDataProvider({ children }) {
     updateThresholds: (next) => call(api("/api/thresholds", "PUT", next)).then(setThresholds),
     planEvacuation,
     clearDemoData: () => call(api("/api/admin/clear-data", "POST", {})),
+    setRainLink: (enabled) => call(api("/api/settings/rain-link", "PUT", { enabled })).then((r) => setRainLinkState(r.rainLink)),
     buildEvacuationPlan: (body) => call(api("/api/evacuation-plan", "POST", body)),
     issueEvacuationOrder: (body) => call(api("/api/evacuation-plan/execute", "POST", body)),
   };

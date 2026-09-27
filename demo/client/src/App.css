@@ -355,3 +355,11 @@ a.feed-item:hover { background: #1c1c1a; }
 .beds-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; margin-top: 18px; padding-top: 16px; border-top: 1px solid #2c2c2a; }
 .beds-item { display: flex; flex-direction: column; gap: 5px; }
 .info-banner { background: #0f1f0f; border: 1px solid #1f4d1f; color: #8fe08f; padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; line-height: 1.5; }
+
+/* Live rainfall */
+.rain-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.rain-cell { background: #141414; border: 1px solid #2c2c2a; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 3px; }
+.rain-now { font-size: 12px; color: #c3c2b7; }
+.rain-total { color: #7fb2f0; }
+.c-rain { font-size: 13px; color: #9fc4f2; margin: 10px 0 0; }
+@media (max-width: 1100px) { .rain-grid { grid-template-columns: repeat(2, 1fr); } }

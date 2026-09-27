@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
 import { useFloodData } from "../FloodDataContext";
 import { STATUS, ZONE_COLOR, CATEGORIES, timeAgo, formatCount } from "../constants";
 import MapReady from "../MapReady";
+import { RainStrip } from "../Rainfall";
 import { useAuth } from "../AuthContext";
 
 export default function Overview() {
@@ -112,6 +113,8 @@ export default function Overview() {
           </div>
         </div>
       </section>
+
+      <RainStrip />
 
       <section className="panel trend-card">
         <div className="panel-head">

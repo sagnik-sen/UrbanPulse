@@ -5,6 +5,7 @@ const { planEvacuation, routeExposure } = require("./evacuation");
 const { snapshotRisk, forecastRisk, levelDistribution } = require("./risk");
 const { assignEvacuees, assignGreedyNearest } = require("./assignment");
 const { planGroups } = require("./planner");
+const { parseRainfall, intensityLabel, createRainfallFeed, buildUrl } = require("./rainfall");
 const { openDb } = require("./db");
 const { createZones, stepZones, injectStorm, seededRng } = require("./simulator");
 const { createAuth, hashPassword, verifyPassword, requireRole } = require("./auth");
@@ -268,4 +269,55 @@ test("group planner respects held seats and shelter capacity under every method"
   }
   const independent = planGroups({ groups, shelters, candidatesFor, risk, method: "independent" });
   assert.equal(load(independent, "near"), 120, "independent ignores other groups and overfills the nearest shelter");
+});
+
+const rainZones = [{ id: "a", lat: 12.97, lng: 80.22 }, { id: "b", lat: 13.0, lng: 80.25 }];
+const meteo = (current, values) => ({
+  current: { time: "2026-09-28T03:15", precipitation: current },
+  hourly: {
+    time: Array.from({ length: 48 }, (_, i) => `2026-09-${28 + Math.floor(i / 24)}T${String(i % 24).padStart(2, "0")}:00`),
+    precipitation: values,
+    precipitation_probability: values.map((v) => (v > 0 ? 80 : 10)),
+  },
+});
+
+test("rainfall parser starts at the current hour and totals the next 24 hours", () => {
+  const values = Array(48).fill(0);
+  values[3] = 1; values[5] = 4; values[30] = 9; // hour 30 is beyond the 24 h window from 03:00
+  const r = parseRainfall(rainZones, [meteo(0.8, values), meteo(0, Array(48).fill(0))]);
+  assert.equal(r.a.hourly[0].time, "2026-09-28T03:00");
+  assert.equal(r.a.hourly.length, 24);
+  assert.equal(r.a.next24hMm, 5);
+  assert.equal(r.a.peakMmPerHr, 4);
+  assert.equal(r.a.peakAt, "2026-09-28T05:00");
+  assert.equal(r.a.currentMmPerHr, 0.8);
+  assert.equal(r.b.next24hMm, 0);
+  assert.throws(() => parseRainfall(rainZones, [meteo(0, values)]), /expected 2/);
+  assert.match(buildUrl(rainZones), /latitude=12\.9700%2C13\.0000/);
+});
+
+test("rainfall intensity labels follow IMD-style bands", () => {
+  assert.equal(intensityLabel(0), "No rain");
+  assert.equal(intensityLabel(1), "Light rain");
+  assert.equal(intensityLabel(5), "Moderate rain");
+  assert.equal(intensityLabel(20), "Heavy rain");
+  assert.equal(intensityLabel(50), "Very heavy rain");
+});
+
+test("rainfall feed keeps the last good reading when a refresh fails", async () => {
+  let fail = false;
+  const fetchImpl = async () => {
+    if (fail) throw new Error("offline");
+    return { ok: true, json: async () => [meteo(2, Array(48).fill(1)), meteo(0, Array(48).fill(0))] };
+  };
+  const feed = createRainfallFeed(rainZones, { fetchImpl, now: () => 1000 });
+  assert.equal(feed.get().stale, true);
+  await feed.refresh();
+  assert.equal(feed.get().stale, false);
+  assert.equal(feed.get().zones.a.currentMmPerHr, 2);
+  fail = true;
+  await feed.refresh();
+  assert.equal(feed.get().stale, true);
+  assert.equal(feed.get().error, "offline");
+  assert.equal(feed.get().zones.a.currentMmPerHr, 2, "old reading kept");
 });

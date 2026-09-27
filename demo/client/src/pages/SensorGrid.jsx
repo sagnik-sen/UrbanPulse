@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer } from "recharts";
 import { useFloodData } from "../FloodDataContext";
 import { STATUS, ZONE_COLOR } from "../constants";
+import { RainLine } from "../Rainfall";
 
 export default function SensorGrid() {
   const { locations, history } = useFloodData();
@@ -41,6 +42,7 @@ export default function SensorGrid() {
             {loc.forecastHours != null && (
               <div className="sensor-forecast">AI forecast: critical in ~{loc.forecastHours}h</div>
             )}
+            <div style={{ marginTop: 6 }}><RainLine zoneId={loc.id} /></div>
           </Link>
         ))}
       </div>

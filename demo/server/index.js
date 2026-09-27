@@ -12,6 +12,7 @@ const { openDb } = require("./db");
 const { randomUUID } = require("node:crypto");
 const { createAuth, attachUser, requireRole } = require("./auth");
 const { createZones, createShelters, stepZones, injectStorm } = require("./simulator");
+const { createRainfallFeed } = require("./rainfall");
 
 // served same-origin behind the Vite dev proxy, so no CORS: cross-site pages can't use the session cookie
 const app = express();
@@ -43,6 +44,13 @@ io.on("connection", (socket) => {
 const toStaff = (event, payload) => io.to(STAFF_ROOM).emit(event, payload);
 const DEFAULT_THRESHOLDS = { warning: 40, danger: 70 };
 let thresholds = db.getSetting("thresholds", DEFAULT_THRESHOLDS);
+
+// Live rainfall (Open-Meteo). With the link on, each zone's current rain rate adds water every
+// tick; with storm decay of 3%/tick that settles ~5 level points above normal per mm/h,
+// so light rain (2 mm/h) nudges levels and heavy rain (10+ mm/h) floods.
+const RAIN_LEVEL_PER_MM = 0.15;
+const RAIN_REFRESH_MS = 10 * 60 * 1000;
+let rainLink = db.getSetting("rainLink", true);
 
 function riskLevel(level) {
   if (level >= thresholds.danger) return "danger";
@@ -154,6 +162,10 @@ function updateShelters() {
 
 function tick() {
   t += 1;
+  const rain = rainfall.get();
+  if (rainLink && !rain.stale) {
+    for (const z of LOCATIONS) z.storm += (rain.zones[z.id]?.currentMmPerHr || 0) * RAIN_LEVEL_PER_MM;
+  }
   stepZones(LOCATIONS, t, Math.random);
 
   const payload = currentSnapshot();
@@ -169,6 +181,15 @@ function tick() {
 }
 
 setInterval(tick, 2000);
+
+const rainfall = createRainfallFeed(LOCATIONS);
+async function refreshRainfall() {
+  const state = await rainfall.refresh();
+  if (state.error) console.warn(`rainfall refresh failed: ${state.error}`);
+  io.emit("rainfall-update", state);
+}
+refreshRainfall();
+setInterval(refreshRainfall, RAIN_REFRESH_MS);
 
 app.post("/api/auth/login", (req, res) => {
   const { username, password } = req.body || {};
@@ -191,11 +212,11 @@ app.get("/api/auth/me", (req, res) => {
 
 // citizen app: live levels, shelters, public alerts; nothing with reporter names or dispatch details
 app.get("/api/public-state", (req, res) => {
-  res.json({ locations: currentSnapshot(), broadcasts, shelters: SHELTERS, thresholds });
+  res.json({ locations: currentSnapshot(), broadcasts, shelters: SHELTERS, thresholds, rainfall: rainfall.get(), rainLink });
 });
 
 app.get("/api/state", requireRole(...STAFF), (req, res) => {
-  res.json({ locations: currentSnapshot(), history, incidents, reports: citizenReports, broadcasts, shelters: SHELTERS, teams: TEAMS, thresholds });
+  res.json({ locations: currentSnapshot(), history, incidents, reports: citizenReports, broadcasts, shelters: SHELTERS, teams: TEAMS, thresholds, rainfall: rainfall.get(), rainLink });
 });
 
 app.put("/api/thresholds", requireRole("admin"), (req, res) => {
@@ -206,6 +227,14 @@ app.put("/api/thresholds", requireRole("admin"), (req, res) => {
     io.emit("thresholds-updated", thresholds);
   }
   res.json(thresholds);
+});
+
+app.put("/api/settings/rain-link", requireRole("admin"), (req, res) => {
+  if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ error: "enabled must be true or false" });
+  rainLink = req.body.enabled;
+  db.setSetting("rainLink", rainLink);
+  io.emit("rain-link-updated", { rainLink });
+  res.json({ rainLink });
 });
 
 app.post("/api/simulate/storm", requireRole("admin"), (req, res) => {

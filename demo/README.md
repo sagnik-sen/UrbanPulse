@@ -6,6 +6,11 @@ exponential smoothing (stands in for the LSTM in the deck). Reports, incidents, 
 thresholds are saved in SQLite (`demo/server/data/urbanpulse.db`) and survive
 restarts; clear them from Settings → Demo Data before a presentation.
 
+**Live rainfall is real:** every zone's current rain and 24-hour rain forecast come from
+[Open-Meteo](https://open-meteo.com) (free, no key), refreshed every 10 minutes. With
+Settings → Live rainfall linked (the default), each zone's real rain rate adds water to its
+simulated drains, about +5 level points per mm/h, so heavy rain floods zones on its own.
+
 Requires Node.js 22.5 or newer (uses the built-in `node:sqlite` module).
 
 ## Run
@@ -41,6 +46,7 @@ Override the demo passwords with `UP_ADMIN_PASSWORD`, `UP_OFFICER_PASSWORD` and
 - **Broadcasts**: compose SMS/push/siren alerts by zone with templates; history shows automated vs manual alerts and recipient estimates
 - **Relief Shelters**: capacity and live occupancy (rises while the linked zone has an active incident)
 - **Citizen app** (`/citizen`, also linked from the sidebar): mobile-first public view with area status in plain language, the forecast, an automatic safe route when your area floods, official alerts, the report form and tap-to-call emergency numbers
+- **Live rainfall**: real per-zone rain on the Overview, an hourly 24 h rain chart on Zone Detail, a rain line on sensor cards and in the citizen app
 - **Analytics**, **Architecture** (8-layer diagram marking what's prototyped), **Settings** (live thresholds + Storm Simulator)
 
 ## Demo script (about 3 minutes)

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer } from "react-leaflet";
 import { useFloodData } from "../FloodDataContext";
-import { STATUS, timeAgo } from "../constants";
+import { STATUS, timeAgo, rainLabel, hourLabel } from "../constants";
 import MapReady from "../MapReady";
 import ReportModal from "../ReportModal";
 import Toasts from "../Toasts";
@@ -37,7 +37,7 @@ function forecastText(hours) {
 }
 
 export default function Citizen() {
-  const { locations, broadcasts, connected } = useFloodData();
+  const { locations, broadcasts, connected, rainfall } = useFloodData();
   const [areaId, setAreaId] = useState(readSavedArea);
   const [coords, setCoords] = useState(null);
   const [geoError, setGeoError] = useState("");
@@ -137,6 +137,15 @@ export default function Citizen() {
         <p className="c-status-text">{guide.text}</p>
         {soon && area.risk === "warning" && <p className="c-status-forecast">Forecast: may reach danger level in {soon}.</p>}
         {soon && area.risk === "safe" && <p className="c-status-forecast">Forecast: levels rising, danger possible in {soon}.</p>}
+        {rainfall?.zones?.[area.id] && (() => {
+          const r = rainfall.zones[area.id];
+          return (
+            <p className="c-rain">
+              🌧 {rainLabel(r.currentMmPerHr)} now ({r.currentMmPerHr} mm/h) · {r.next24hMm} mm expected in the next 24 h
+              {r.peakMmPerHr >= 2.5 && <> · heaviest around {hourLabel(r.peakAt)}</>}
+            </p>
+          );
+        })()}
       </section>
 
       <section className="c-card">

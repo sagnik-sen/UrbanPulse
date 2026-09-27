@@ -2,6 +2,7 @@ import { useParams, Link } from "react-router-dom";
 import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, Legend } from "recharts";
 import { useFloodData } from "../FloodDataContext";
 import { useAuth } from "../AuthContext";
+import { RainChart } from "../Rainfall";
 import { STATUS, ZONE_COLOR, INCIDENT_STATUS, CATEGORIES, SEVERITY, timeAgo, duration, formatCount } from "../constants";
 
 const SIM_MIN_PER_TICK = 2; // matches server: one 2s tick = 2 simulated minutes
@@ -88,6 +89,8 @@ export default function ZoneDetail() {
         </ResponsiveContainer>
         <p className="muted small" style={{ marginTop: 8 }}>Model: damped-trend exponential smoothing over the last 30 readings (a stand-in for the trained LSTM).</p>
       </section>
+
+      <RainChart zoneId={loc.id} />
 
       <section className="grid-3">
         <div className="panel">

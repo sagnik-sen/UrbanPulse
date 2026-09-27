@@ -118,11 +118,40 @@ function DemoData() {
   );
 }
 
+function RainLinkSettings() {
+  const { rainLink, setRainLink, rainfall, pushToast } = useFloodData();
+  const [saving, setSaving] = useState(false);
+
+  const toggle = async () => {
+    setSaving(true);
+    try {
+      await setRainLink(!rainLink);
+      pushToast({ kind: "info", title: rainLink ? "Live rain unlinked" : "Live rain linked", text: rainLink ? "Levels now come from the simulator only" : "Real Chennai rainfall now feeds the simulated drains" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="panel">
+      <div className="panel-head"><h2>Live Rainfall</h2><span className="muted small">Open-Meteo, refreshed every 10 min</span></div>
+      <p className="muted small" style={{ marginBottom: 14 }}>
+        When linked, each zone's real current rain rate adds water to its simulated drains every tick (about +5 level points per mm/h at steady state). Heavy rain (10+ mm/h) will push zones into danger on its own.
+      </p>
+      <label className="check" style={{ fontSize: 13.5 }}>
+        <input type="checkbox" checked={rainLink} disabled={saving} onChange={toggle} /> Link simulation to live rainfall
+      </label>
+      {rainfall?.stale && <div className="form-error" style={{ marginTop: 12 }}>Weather service unreachable ({rainfall.error}). The last good reading is kept; linking has no effect until it recovers.</div>}
+    </div>
+  );
+}
+
 export default function Settings() {
   return (
     <section className="grid-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
       <ThresholdSettings />
       <StormSimulator />
+      <RainLinkSettings />
       <DemoData />
     </section>
   );
