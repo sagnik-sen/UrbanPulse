@@ -13,6 +13,10 @@ const { randomUUID } = require("node:crypto");
 const { createAuth, attachUser, requireRole } = require("./auth");
 const { createZones, createShelters, stepZones, injectStorm } = require("./simulator");
 const { createRainfallFeed } = require("./rainfall");
+const { createAnchor } = require("./anchor");
+
+// optional server/.env holds the signing key for blockchain anchoring; the app runs without it
+try { process.loadEnvFile(path.join(__dirname, ".env")); } catch {}
 
 // served same-origin behind the Vite dev proxy, so no CORS: cross-site pages can't use the session cookie
 const app = express();
@@ -51,6 +55,23 @@ function audit(user, action, details = {}) {
   db.logAudit(entry);
   io.to(ADMIN_ROOM).emit("audit-entry", entry);
 }
+// Audit entries are anchored to Shardeum in batches (anchor.js). Every 5 minutes keeps testnet
+// gas low; admins can anchor immediately from the Audit Log page.
+const ANCHOR_INTERVAL_MS = 5 * 60_000;
+const deployment = (() => { try { return require("./chain/deployment.json"); } catch { return null; } })();
+const chain = createAnchor({
+  db,
+  rpc: process.env.SHARDEUM_RPC || deployment?.rpc,
+  privateKey: process.env.SHARDEUM_PRIVATE_KEY,
+  deployment,
+  // deliberately not audited: an audit entry per anchor would itself need anchoring, forever
+  onAnchored: (b) => io.to(ADMIN_ROOM).emit("audit-anchored", { batchId: b.id, txHash: b.txHash, ids: b.ids }),
+});
+if (chain.canWrite) {
+  setInterval(() => chain.anchorNow().catch((err) => console.error("anchoring failed:", err.shortMessage || err.message)), ANCHOR_INTERVAL_MS);
+}
+console.log(chain.enabled ? `audit anchoring: contract ${chain.address}${chain.canWrite ? "" : " (verify only, no signing key)"}` : "audit anchoring: off (no contract configured)");
+
 const DEFAULT_THRESHOLDS = { warning: 40, danger: 70 };
 let thresholds = db.getSetting("thresholds", DEFAULT_THRESHOLDS);
 
@@ -569,6 +590,31 @@ app.get("/api/audit", requireRole("admin"), (req, res) => {
   const action = AUDIT_ACTIONS.has(req.query.action) ? req.query.action : undefined;
   const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 500));
   res.json(db.listAudit({ action, limit }));
+});
+
+app.get("/api/audit/chain", requireRole("admin"), (req, res) => {
+  res.json({ enabled: chain.enabled, canWrite: chain.canWrite, contract: chain.address ?? null, chainId: chain.chainId ?? null, network: deployment?.network ?? null, explorer: deployment?.explorer ?? null });
+});
+
+const chainError = (res, err) => res.status(502).json({ error: `Blockchain unreachable: ${err.shortMessage || err.message}` });
+
+app.post("/api/audit/anchor", requireRole("admin"), async (req, res) => {
+  if (!chain.canWrite) return res.status(503).json({ error: "Anchoring is not configured on this server" });
+  try {
+    const batch = await chain.anchorNow();
+    res.json(batch ? { anchored: batch.count, batchId: batch.id, txHash: batch.txHash } : { anchored: 0 });
+  } catch (err) {
+    chainError(res, err);
+  }
+});
+
+app.get("/api/audit/verify", requireRole("admin"), async (req, res) => {
+  if (!chain.enabled) return res.status(503).json({ error: "No blockchain contract configured" });
+  try {
+    res.json(await chain.verify());
+  } catch (err) {
+    chainError(res, err);
+  }
 });
 
 const PORT = 4000;

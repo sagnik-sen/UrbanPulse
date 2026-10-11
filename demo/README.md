@@ -47,7 +47,7 @@ Override the demo passwords with `UP_ADMIN_PASSWORD`, `UP_OFFICER_PASSWORD` and
 - **Relief Shelters**: capacity and live occupancy (rises while the linked zone has an active incident)
 - **Citizen app** (`/citizen`, also linked from the sidebar): mobile-first public view with area status in plain language, the forecast, an automatic safe route when your area floods, official alerts, the report form and tap-to-call emergency numbers
 - **Live rainfall**: real per-zone rain on the Overview, an hourly 24 h rain chart on Zone Detail, a rain line on sensor cards and in the citizen app
-- **Audit Log** (admin): every staff action and sign-in attempt (thresholds, storms, dispatches, notes, report status, broadcasts, evacuation orders, rain link, failed/locked sign-ins), live, searchable, exportable as CSV. It is kept when demo data is cleared
+- **Audit Log** (admin): every staff action and sign-in attempt (thresholds, storms, dispatches, notes, report status, broadcasts, evacuation orders, rain link, failed/locked sign-ins), live, searchable, exportable as CSV. It is append-only, kept when demo data is cleared, and anchored to the Shardeum blockchain: **Anchor now** / **Verify on chain** show each entry as verified or tampered
 - **Analytics**, **Architecture** (8-layer diagram marking what's prototyped), **Settings** (live thresholds + Storm Simulator)
 
 ## Demo script (about 3 minutes)
@@ -87,6 +87,31 @@ Compares nine planning policies over 1,600 seeded flood scenarios on real road r
 `experiments/results/results.md`. Plans use only what is known at planning time and are
 scored against what the water actually did.
 
+## Blockchain audit anchoring
+
+Audit entries are hashed into a Merkle tree in batches, and only the root goes on-chain to the
+`AuditAnchor` contract (`server/chain/AuditAnchor.sol`) on the Shardeum Mezame testnet. Entries
+stay in SQLite, so no personal data reaches the public ledger. Only whitelisted agency wallets can
+anchor, and nothing can be edited once written. The server anchors every 5 minutes when there are
+new entries; admins can also anchor immediately.
+
+- Contract address, RPC and explorer: `server/chain/deployment.json`
+- Signing key: `SHARDEUM_PRIVATE_KEY` in `server/.env` (git-ignored). Without it the app still runs, entries stay "pending", and verification still works read-only
+- Change the contract: edit the `.sol`, then `node chain/compile.js` and `node chain/deploy.js` (deploying starts a fresh, empty ledger)
+
+Tamper demo: anchor, then run `node chain/tamper-demo.js` in `demo/server` (it edits the newest
+anchored entry directly in SQLite, as an insider would), then press **Verify on chain**. That row
+turns red. `node chain/tamper-demo.js --undo` restores it.
+
+Measured on Mezame: deploy 537k gas (~620 test SHM); the first batch 93k gas (~107 test SHM, it
+initialises the batch list), later batches ~76k gas (~88 test SHM) whether they hold 1, 50 or 500
+entries (gas estimates), since only the root is stored. Confirmation took ~3 s.
+
+Limits: the demo has one key, so multi-agency signing is simulated (the contract supports more
+agencies via `setAgency`). Entries are protected from the moment they are anchored, not before,
+so the up-to-5-minute pending window is unprotected. Being append-only, the log also grows without
+a cap (failed sign-ins from unknown users included).
+
 ## Talking points
 
 - Swap `stepZones()` in `server/simulator.js` for real sensor ingestion and `server/forecast.js` for the trained LSTM once hardware/data exist. The rest of the app only reads the forecast path it returns
@@ -95,5 +120,5 @@ scored against what the water actually did.
 - Incidents use hysteresis (clear only 10 points below danger) and a 4-second debounce so sensor noise doesn't spam alerts
 - Thresholds are live and global: changing them re-classifies every zone in real time
 - Security: staff sign-in with scrypt-hashed passwords, database-backed sessions in an httpOnly cookie, lockout after 10 failed attempts. Roles are enforced on the server (the UI just hides what you can't use). The citizen app reads a separate public endpoint with no reporter names or dispatch details
-- Accountability: an audit trail in SQLite records who did what and when; it survives "clear demo data" and keeps the latest 2,000 entries
+- Accountability: an audit trail in SQLite records who did what and when; it is append-only, survives "clear demo data", and is anchored to the Shardeum blockchain so any later edit or deletion is detectable
 - Persistence: Node's built-in SQLite, write-through from the in-memory working set, no native dependencies

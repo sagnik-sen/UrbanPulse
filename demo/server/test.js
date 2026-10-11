@@ -7,6 +7,7 @@ const { assignEvacuees, assignGreedyNearest } = require("./assignment");
 const { planGroups } = require("./planner");
 const { parseRainfall, intensityLabel, createRainfallFeed, buildUrl } = require("./rainfall");
 const { openDb } = require("./db");
+const { leafHash, merkleRoot, checkBatch } = require("./anchor");
 const { createZones, stepZones, injectStorm, seededRng } = require("./simulator");
 const { createAuth, hashPassword, verifyPassword, requireRole } = require("./auth");
 
@@ -322,13 +323,71 @@ test("rainfall feed keeps the last good reading when a refresh fails", async () 
   assert.equal(feed.get().zones.a.currentMmPerHr, 2, "old reading kept");
 });
 
-test("audit log is newest-first, filterable, capped, and survives clearing demo data", () => {
+test("audit log is newest-first, filterable, append-only, and survives clearing demo data", () => {
   const db = openDb(":memory:");
-  for (let i = 1; i <= 5; i++) db.logAudit({ id: `e${i}`, ts: i, username: "admin", role: "admin", action: i % 2 ? "login" : "broadcast_sent", details: { n: i } }, 4);
+  for (let i = 1; i <= 5; i++) db.logAudit({ id: `e${i}`, ts: i, username: "admin", role: "admin", action: i % 2 ? "login" : "broadcast_sent", details: { n: i } });
   const all = db.listAudit();
-  assert.deepEqual(all.map((e) => e.id), ["e5", "e4", "e3", "e2"], "oldest pruned past the cap");
+  assert.deepEqual(all.map((e) => e.id), ["e5", "e4", "e3", "e2", "e1"]);
   assert.deepEqual(all[0].details, { n: 5 });
+  assert.equal(all[0].batch_id, null, "not anchored yet");
   assert.deepEqual(db.listAudit({ action: "broadcast_sent" }).map((e) => e.id), ["e4", "e2"]);
   db.clearRecords();
-  assert.equal(db.listAudit().length, 4);
+  assert.equal(db.listAudit().length, 5);
+});
+
+test("merkle root handles single, odd and even batches and changes with any leaf", () => {
+  const leaves = ["a", "b", "c", "d", "e"].map((x) => leafHash({ id: x, ts: 1, username: null, role: null, action: "login", details: "{}" }));
+  assert.equal(merkleRoot(leaves.slice(0, 1)), leaves[0]);
+  for (const n of [2, 3, 4, 5]) assert.match(merkleRoot(leaves.slice(0, n)), /^0x[0-9a-f]{64}$/);
+  assert.notEqual(merkleRoot(leaves), merkleRoot(leaves.slice(0, 4)));
+  assert.notEqual(merkleRoot(leaves), merkleRoot([...leaves.slice(0, 4), leaves[0]]));
+});
+
+// anchors every pending entry into one batch and returns what the chain would hold
+function anchorAll(db, id = 0) {
+  const rows = db.unanchoredAudit(500).map((r) => ({ ...r, leaf: leafHash(r) }));
+  const onChain = { root: merkleRoot(rows.map((r) => r.leaf)), count: rows.length };
+  db.saveAnchorBatch({ id, ...onChain, txHash: "0xtx", anchoredAt: 0 }, rows);
+  return onChain;
+}
+
+test("anchored audit batch verifies, and edits or deletions are caught", () => {
+  const db = openDb(":memory:");
+  for (let i = 1; i <= 5; i++) db.logAudit({ id: `e${i}`, ts: i, username: "officer", role: "officer", action: "broadcast_sent", details: { message: `alert ${i}` } });
+  const onChain = anchorAll(db);
+  assert.equal(db.unanchoredAudit(500).length, 0);
+  assert.equal(db.listAudit()[0].tx_hash, "0xtx");
+
+  const clean = checkBatch(db.batchEntries(0), onChain);
+  assert.ok(clean.intact);
+  assert.equal(Object.values(clean.rows).filter((s) => s === "verified").length, 5);
+
+  // one character changed in one entry: only that entry is flagged
+  db.raw.prepare("UPDATE audit SET details = ? WHERE id = 'e3'").run(JSON.stringify({ message: "alert 9" }));
+  const edited = checkBatch(db.batchEntries(0), onChain);
+  assert.equal(edited.intact, false);
+  assert.equal(edited.rows.e3, "tampered");
+  assert.equal(edited.rows.e2, "verified");
+
+  // deleting an entry is caught; deleting its anchor record too breaks the whole batch
+  db.raw.prepare("DELETE FROM audit WHERE id = 'e5'").run();
+  assert.deepEqual(checkBatch(db.batchEntries(0), onChain).deleted, ["e5"]);
+  db.raw.prepare("DELETE FROM audit_anchor WHERE audit_id = 'e5'").run();
+  const covered = checkBatch(db.batchEntries(0), onChain);
+  assert.equal(covered.sealed, false);
+  assert.ok(Object.values(covered.rows).every((s) => s === "tampered"));
+
+  // a batch the chain has no record of is never trusted
+  assert.equal(checkBatch(db.batchEntries(0), null).intact, false);
+});
+
+test("entries logged after anchoring wait for the next batch", () => {
+  const db = openDb(":memory:");
+  db.logAudit({ id: "a", ts: 1, action: "login", details: {} });
+  anchorAll(db, 0);
+  db.logAudit({ id: "b", ts: 2, action: "logout", details: {} });
+  assert.deepEqual(db.unanchoredAudit(500).map((r) => r.id), ["b"]);
+  const onChain = anchorAll(db, 1);
+  assert.ok(checkBatch(db.batchEntries(1), onChain).intact);
+  assert.deepEqual(db.anchorBatches().map((b) => b.id), [0, 1]);
 });

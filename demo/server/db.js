@@ -31,6 +31,19 @@ function openDb(file = path.join(DATA_DIR, "urbanpulse.db")) {
       details TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS audit_ts ON audit (ts DESC);
+    CREATE TABLE IF NOT EXISTS anchor_batches (
+      id INTEGER PRIMARY KEY,
+      root TEXT NOT NULL,
+      count INTEGER NOT NULL,
+      tx_hash TEXT NOT NULL,
+      anchored_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS audit_anchor (
+      audit_id TEXT PRIMARY KEY,
+      batch_id INTEGER NOT NULL,
+      pos INTEGER NOT NULL,
+      leaf TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -59,17 +72,43 @@ function openDb(file = path.join(DATA_DIR, "urbanpulse.db")) {
       db.exec("DELETE FROM reports; DELETE FROM incidents; DELETE FROM broadcasts;");
     },
 
-    // audit trail survives "clear demo data" on purpose; only the oldest entries past the cap are pruned
-    logAudit({ id, ts, username, role, action, details }, keep = 2000) {
+    // append-only: entries are never pruned (and survive "clear demo data"), since anchored
+    // batches are verified by recomputing their Merkle root from every entry in them
+    logAudit({ id, ts, username, role, action, details }) {
       db.prepare("INSERT INTO audit (id, ts, username, role, action, details) VALUES (?, ?, ?, ?, ?, ?)")
         .run(id, ts, username ?? null, role ?? null, action, JSON.stringify(details ?? {}));
-      db.prepare("DELETE FROM audit WHERE id NOT IN (SELECT id FROM audit ORDER BY ts DESC LIMIT ?)").run(keep);
     },
     listAudit({ action, limit = 500 } = {}) {
-      const rows = action
-        ? db.prepare("SELECT * FROM audit WHERE action = ? ORDER BY ts DESC LIMIT ?").all(action, limit)
-        : db.prepare("SELECT * FROM audit ORDER BY ts DESC LIMIT ?").all(limit);
+      const sql = `SELECT a.*, x.batch_id, b.tx_hash FROM audit a
+        LEFT JOIN audit_anchor x ON x.audit_id = a.id LEFT JOIN anchor_batches b ON b.id = x.batch_id
+        ${action ? "WHERE a.action = ?" : ""} ORDER BY a.ts DESC LIMIT ?`;
+      const rows = action ? db.prepare(sql).all(action, limit) : db.prepare(sql).all(limit);
       return rows.map((r) => ({ ...r, details: JSON.parse(r.details) }));
+    },
+
+    // blockchain anchoring (anchor.js): rows come back raw so hashes match the stored text exactly
+    unanchoredAudit(limit) {
+      return db.prepare("SELECT a.* FROM audit a LEFT JOIN audit_anchor x ON x.audit_id = a.id WHERE x.audit_id IS NULL ORDER BY a.ts, a.id LIMIT ?").all(limit);
+    },
+    saveAnchorBatch({ id, root, count, txHash, anchoredAt }, rows) {
+      db.exec("BEGIN");
+      try {
+        db.prepare("INSERT INTO anchor_batches (id, root, count, tx_hash, anchored_at) VALUES (?, ?, ?, ?, ?)").run(id, root, count, txHash, anchoredAt);
+        const link = db.prepare("INSERT INTO audit_anchor (audit_id, batch_id, pos, leaf) VALUES (?, ?, ?, ?)");
+        rows.forEach((r, pos) => link.run(r.id, id, pos, r.leaf));
+        db.exec("COMMIT");
+      } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+      }
+    },
+    anchorBatches() {
+      return db.prepare("SELECT * FROM anchor_batches ORDER BY id").all();
+    },
+    // anchor records of a batch in anchoring order, with the entry each points to (entry columns null if deleted)
+    batchEntries(batchId) {
+      return db.prepare(`SELECT x.audit_id, x.leaf, a.id, a.ts, a.username, a.role, a.action, a.details
+        FROM audit_anchor x LEFT JOIN audit a ON a.id = x.audit_id WHERE x.batch_id = ? ORDER BY x.pos`).all(batchId);
     },
 
     getSetting(key, fallback) {

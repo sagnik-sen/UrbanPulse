@@ -1,0 +1,11 @@
+{
+  "network": "Shardeum Mezame testnet",
+  "chainId": 8119,
+  "rpc": "https://api-mezame.shardeum.org",
+  "explorer": "https://explorer-mezame.shardeum.org",
+  "address": "0x7C4Bc679f261158Acb2De9F3c42Ec9A219F3b9bf",
+  "deployTx": "0x91c1527efc5abfcac49449974099630049bd9bb7ed29c7cf46de7bf42c685019",
+  "block": 8180390,
+  "gasUsed": "537242",
+  "deployedAt": "2026-10-11T21:36:57.459Z"
+}

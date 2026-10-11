@@ -369,4 +369,10 @@ a.feed-item:hover { background: #1c1c1a; }
 .audit-tag.info { background: #16233a; color: #7fb2f0; }
 .audit-tag.warn { background: #3a2f10; color: #fab219; }
 .audit-tag.danger { background: #3a1414; color: #ff9b9b; }
+.audit-tag.ok { background: #0f1f0f; color: #5fd35f; }
+a.audit-tag { text-decoration: none; }
+a.audit-tag:hover { filter: brightness(1.25); }
+.chain-banner { font-size: 12.5px; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; border: 1px solid; }
+.chain-banner.ok { background: #0f1f0f; border-color: #1f4d1f; color: #5fd35f; }
+.chain-banner.bad { background: #2a1414; border-color: #5a2323; color: #ff9b9b; }
 .audit-details { font-size: 12.5px; line-height: 1.45; max-width: 560px; }

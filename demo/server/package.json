@@ -12,11 +12,15 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "ethers": "^6.17.0",
     "express": "^5.2.1",
     "socket.io": "^4.8.3"
   },
   "private": true,
   "engines": {
     "node": ">=22.5"
+  },
+  "devDependencies": {
+    "solc": "^0.8.24"
   }
 }

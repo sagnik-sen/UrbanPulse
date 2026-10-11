@@ -44,6 +44,7 @@ export function FloodDataProvider({ children }) {
   const [rainfall, setRainfall] = useState(null);
   const [rainLink, setRainLinkState] = useState(true);
   const [liveAudit, setLiveAudit] = useState([]); // pushed only to admins' sockets
+  const [liveAnchors, setLiveAnchors] = useState({}); // audit id -> { batch_id, tx_hash } as batches land on-chain
 
   const pushToast = useCallback((toast) => {
     const id = Date.now() + Math.random();
@@ -117,6 +118,11 @@ export function FloodDataProvider({ children }) {
     socket.on("rainfall-update", setRainfall);
     setLiveAudit([]);
     socket.on("audit-entry", (e) => setLiveAudit((prev) => [e, ...prev].slice(0, 200)));
+    socket.on("audit-anchored", ({ batchId, txHash, ids }) => setLiveAnchors((prev) => {
+      const next = { ...prev };
+      for (const id of ids) next[id] = { batch_id: batchId, tx_hash: txHash };
+      return next;
+    }));
     socket.on("rain-link-updated", ({ rainLink: on }) => setRainLinkState(on));
     socket.on("data-cleared", ({ thresholds: t }) => {
       setIncidents([]);
@@ -135,7 +141,7 @@ export function FloodDataProvider({ children }) {
   });
 
   const value = {
-    locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts, rainfall, rainLink, liveAudit,
+    locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts, rainfall, rainLink, liveAudit, liveAnchors,
     pushToast,
     dismissToast,
     submitReport: (body) => api("/api/citizen-report", "POST", body),
@@ -152,6 +158,9 @@ export function FloodDataProvider({ children }) {
       if (!r.ok) throw Object.assign(new Error(data.error || "Request failed"), { status: r.status });
       return data;
     })),
+    fetchAuditChain: () => call(api("/api/audit/chain", "GET")),
+    anchorAuditNow: () => call(api("/api/audit/anchor", "POST", {})),
+    verifyAudit: () => call(api("/api/audit/verify", "GET")),
     buildEvacuationPlan: (body) => call(api("/api/evacuation-plan", "POST", body)),
     issueEvacuationOrder: (body) => call(api("/api/evacuation-plan/execute", "POST", body)),
   };
