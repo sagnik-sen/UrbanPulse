@@ -94,8 +94,8 @@ export default function Broadcasts() {
 
         <label className="field">
           <span className="field-label">Message</span>
-          <textarea className="input" rows={4} maxLength={300} value={message} onChange={(e) => { setMessage(e.target.value); setError(""); }} placeholder="Pick a template above or write your own" />
-          <span className="field-hint">{message.length}/300 · est. {formatCount(recipients)} recipients</span>
+          <textarea className="input" rows={4} maxLength={280} value={message} onChange={(e) => { setMessage(e.target.value); setError(""); }} placeholder="Pick a template above or write your own" />
+          <span className="field-hint">{message.length}/280 (+ verification code) · est. {formatCount(recipients)} recipients</span>
         </label>
 
         {error && <div className="form-error" role="alert">{error}</div>}
@@ -120,7 +120,7 @@ export default function Broadcasts() {
                   <span>{b.channels.map((c) => CHANNEL_LABEL[c]).join(", ")}</span>
                 </div>
                 <div className="feed-text">{b.message}</div>
-                <div className="feed-time">{timeAgo(b.ts)} · ~{formatCount(b.recipients)} recipients</div>
+                <div className="feed-time">{timeAgo(b.ts)} · ~{formatCount(b.recipients)} recipients{b.code && <> · code <span className="mono">{b.code}</span></>}</div>
               </div>
             </div>
           ))}

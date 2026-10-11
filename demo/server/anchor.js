@@ -29,6 +29,25 @@ function merkleRoot(leaves) {
   return level[0];
 }
 
+// sibling hashes from leaf `index` up to the root; a level where the node is unpaired adds nothing
+function merkleProof(leaves, index) {
+  const proof = [];
+  let level = leaves;
+  let i = index;
+  while (level.length > 1) {
+    const sibling = i % 2 ? level[i - 1] : level[i + 1];
+    if (sibling !== undefined) proof.push(sibling);
+    const next = [];
+    for (let k = 0; k < level.length; k += 2) next.push(level[k + 1] === undefined ? level[k] : merkleRoot([level[k], level[k + 1]]));
+    level = next;
+    i = Math.floor(i / 2);
+  }
+  return proof;
+}
+
+// sorted pairs make the fold order-free, so a proof is just the list of siblings
+const rootFromProof = (leaf, proof) => proof.reduce((h, s) => merkleRoot([h, s]), leaf);
+
 // entries: anchor records in anchoring order, joined to their audit row (row columns null if deleted)
 // onChain: { root, count } from the contract, or null if the chain has no such batch from us
 function checkBatch(entries, onChain) {
@@ -42,6 +61,41 @@ function checkBatch(entries, onChain) {
   }
   const intact = sealed && deleted.length === 0 && Object.values(rows).every((s) => s === "verified");
   return { sealed, intact, rows, deleted };
+}
+
+// Whole-log check. chain: { total, getBatch(id) -> { root, count, agency }, agency } where agency
+// is the address whose batches count as ours (other agencies share the contract).
+async function verifyLog(db, { total, getBatch, agency }) {
+  const rows = {};
+  const deleted = [];
+  const batches = [];
+  const local = db.anchorBatches();
+  for (const b of local) {
+    const onChain = b.id < total ? await getBatch(b.id) : null;
+    const result = checkBatch(db.batchEntries(b.id), onChain?.agency === agency ? onChain : null);
+    Object.assign(rows, result.rows);
+    deleted.push(...result.deleted);
+    batches.push({ id: b.id, count: b.count, txHash: b.tx_hash, intact: result.intact });
+  }
+  // batches this agency anchored that have vanished from the local database entirely
+  const known = new Set(local.map((b) => b.id));
+  const missing = [];
+  for (let id = 0; id < total; id++) {
+    if (known.has(id)) continue;
+    const c = await getBatch(id);
+    if (c.agency === agency) missing.push({ id, count: c.count });
+  }
+  const tampered = Object.values(rows).filter((s) => s === "tampered").length;
+  return {
+    ok: tampered === 0 && deleted.length === 0 && missing.length === 0 && batches.every((b) => b.intact),
+    checkedAt: Date.now(),
+    verified: Object.keys(rows).length - tampered,
+    tampered,
+    rows,
+    deleted,
+    missing,
+    batches,
+  };
 }
 
 // Without an RPC or contract address the log still works; entries just stay unanchored.
@@ -86,42 +140,38 @@ function createAnchor({ db, rpc, privateKey, deployment, onAnchored }) {
     return chainCache.get(id);
   }
 
-  async function verify() {
-    const agency = wallet?.address ?? (await contract.admin());
+  let agencyAddress = wallet?.address ?? null;
+  const ourAgency = async () => (agencyAddress ??= await contract.admin());
+
+  // one entry with its inclusion proof, for the public alert check; reads only that entry's batch
+  async function verifyEntry(entryId, batchId) {
+    const entries = db.batchEntries(batchId);
+    const index = entries.findIndex((e) => e.audit_id === entryId);
     const total = Number(await contract.batchCount());
-    const rows = {};
-    const deleted = [];
-    const batches = [];
-    const local = db.anchorBatches();
-    for (const b of local) {
-      const onChain = b.id < total ? await chainBatch(b.id) : null;
-      const result = checkBatch(db.batchEntries(b.id), onChain?.agency === agency ? onChain : null);
-      Object.assign(rows, result.rows);
-      deleted.push(...result.deleted);
-      batches.push({ id: b.id, count: b.count, txHash: b.tx_hash, intact: result.intact });
-    }
-    // batches this agency anchored that have vanished from the local database entirely
-    const known = new Set(local.map((b) => b.id));
-    const missing = [];
-    for (let id = 0; id < total; id++) {
-      if (known.has(id)) continue;
-      const c = await chainBatch(id);
-      if (c.agency === agency) missing.push({ id, count: c.count });
-    }
-    const tampered = Object.values(rows).filter((s) => s === "tampered").length;
+    const onChain = batchId < total ? await chainBatch(batchId) : null;
+    const trusted = onChain?.agency === (await ourAgency()) ? onChain : null;
+    const result = checkBatch(entries, trusted);
+    const e = entries[index];
     return {
-      ok: tampered === 0 && deleted.length === 0 && missing.length === 0 && batches.every((b) => b.intact),
-      checkedAt: Date.now(),
-      verified: Object.keys(rows).length - tampered,
-      tampered,
-      rows,
-      deleted,
-      missing,
-      batches,
+      status: result.rows[entryId] ?? "tampered",
+      proof: {
+        entry: { id: e.id, ts: e.ts, username: e.username, role: e.role, action: e.action, details: e.details },
+        leaf: e.leaf,
+        siblings: merkleProof(entries.map((x) => x.leaf), index),
+        batchId,
+        root: onChain?.root ?? null,
+        contract: deployment.address,
+        chainId: deployment.chainId,
+        rpc,
+      },
     };
   }
 
-  return { enabled: true, canWrite: !!wallet, address: deployment.address, chainId: deployment.chainId, anchorNow, verify };
+  async function verify() {
+    return verifyLog(db, { total: Number(await contract.batchCount()), getBatch: chainBatch, agency: await ourAgency() });
+  }
+
+  return { enabled: true, canWrite: !!wallet, address: deployment.address, chainId: deployment.chainId, anchorNow, verify, verifyEntry };
 }
 
-module.exports = { leafHash, merkleRoot, checkBatch, createAnchor };
+module.exports = { leafHash, merkleRoot, merkleProof, rootFromProof, checkBatch, verifyLog, createAnchor };

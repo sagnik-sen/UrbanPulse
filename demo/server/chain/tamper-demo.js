@@ -1,7 +1,8 @@
 // Live-demo helper: plays an insider who edits the database directly, behind the app's back.
-//   node chain/tamper-demo.js         rewrite the newest anchored entry's details
-//   node chain/tamper-demo.js --undo  put the original text back
-// Then press "Verify on chain" on the Audit Log page.
+//   node chain/tamper-demo.js          rewrite the newest anchored entry's details
+//   node chain/tamper-demo.js --alert  rewrite the newest anchored public alert into a fake one
+//   node chain/tamper-demo.js --undo   put the original text back
+// Then press "Verify on chain" on the Audit Log page, or check the alert's code in the citizen app.
 const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
@@ -25,12 +26,18 @@ if (fs.existsSync(backup)) {
   console.log("an entry is already tampered; run with --undo first");
   process.exit(1);
 }
-const row = db.prepare("SELECT a.id, a.action, a.details FROM audit a JOIN audit_anchor x ON x.audit_id = a.id ORDER BY a.ts DESC LIMIT 1").get();
+const alert = process.argv.includes("--alert");
+const row = db.prepare(`SELECT a.id, a.action, a.details FROM audit a JOIN audit_anchor x ON x.audit_id = a.id
+  ${alert ? "WHERE a.action = 'alert_published'" : ""} ORDER BY a.ts DESC LIMIT 1`).get();
 if (!row) {
-  console.log("no anchored entries yet; press \"Anchor now\" on the Audit Log page first");
+  console.log(`no anchored ${alert ? "alerts" : "entries"} yet; ${alert ? "send a broadcast, then " : ""}press "Anchor now" on the Audit Log page first`);
   process.exit(1);
 }
 fs.writeFileSync(backup, JSON.stringify({ id: row.id, details: row.details }));
-const forged = { ...JSON.parse(row.details), ip: "203.0.113.7", note: "edited after the fact" };
+const original = JSON.parse(row.details);
+// the classic forwarded hoax from the 2015 floods
+const forged = alert
+  ? { ...original, message: "URGENT: Chembarambakkam lake breached. Evacuate the entire city immediately. Forward to everyone." }
+  : { ...original, ip: "203.0.113.7", note: "edited after the fact" };
 db.prepare("UPDATE audit SET details = ? WHERE id = ?").run(JSON.stringify(forged), row.id);
-console.log(`tampered with ${row.action} entry ${row.id}`);
+console.log(`tampered with ${row.action} entry ${row.id}${alert ? ` (${original.code})` : ""}`);

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { MapContainer, TileLayer } from "react-leaflet";
 import { useFloodData } from "../FloodDataContext";
 import { STATUS, timeAgo, rainLabel, hourLabel } from "../constants";
@@ -22,6 +23,97 @@ const EMERGENCY = [
   { label: "TN State Disaster Control Room", number: "1070" },
 ];
 
+const CHECK = {
+  verified: { tone: "safe", title: "✓ Genuine official alert", text: "Issued by UrbanPulse and sealed on the Shardeum blockchain. The text below is exactly what was sent." },
+  pending: { tone: "warning", title: "Official alert, seal pending", text: "Issued by UrbanPulse in the last few minutes. It is sealed on the blockchain within 5 minutes." },
+  unreachable: { tone: "warning", title: "Official alert found", text: "The blockchain check is unavailable right now. Compare the text below with the message you received." },
+  unavailable: { tone: "warning", title: "Official alert found", text: "Compare the text below with the message you received." },
+  tampered: { tone: "danger", title: "✗ Record altered", text: "Our record of this alert no longer matches its blockchain seal. Do not act on it; call 1913." },
+  notfound: { tone: "danger", title: "✗ Not an official alert", text: "No UrbanPulse alert has this code. Treat the message as a rumour and do not forward it." },
+};
+
+// accepts the whole pasted message, "UP-1A2B3C4D", "up-1a2b3c4d" or just the 8 characters
+const normalizeCode = (raw) => {
+  const inText = raw.toUpperCase().match(/UP-[0-9A-F]{8}/);
+  if (inText) return inText[0];
+  const c = raw.trim().toUpperCase().replace(/\s+/g, "");
+  return /^[0-9A-F]{8}$/.test(c) ? `UP-${c}` : c;
+};
+
+// Forwarded flood messages are a known problem in Chennai; every official alert carries a code
+// that anyone can check against its blockchain seal.
+// request: { code } set by an alert's "Check it's genuine" link (a new object each click)
+function AlertCheck({ request }) {
+  const [params] = useSearchParams();
+  const [code, setCode] = useState(params.get("verify") ?? "");
+  const [result, setResult] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const cardRef = useRef(null);
+
+  const check = async (raw) => {
+    const c = normalizeCode(raw);
+    setCode(c);
+    setChecking(true);
+    try {
+      const res = await fetch(`/api/alerts/verify/${encodeURIComponent(c)}`);
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 404) setResult({ status: "notfound", code: c });
+      else if (!res.ok) setResult({ error: data.error || "Could not check right now" });
+      else setResult(data);
+    } catch {
+      setResult({ error: "Could not reach UrbanPulse. Check your connection." });
+    } finally {
+      setChecking(false);
+    }
+  };
+  // run once for a ?verify=UP-... link (e.g. tapped from an SMS), then for each alert-list click
+  const initial = useRef(params.get("verify"));
+  useEffect(() => { if (initial.current) check(initial.current); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!request) return;
+    cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    check(request.code);
+  }, [request]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const downloadProof = () => {
+    const blob = new Blob([JSON.stringify(result.proof, null, 2)], { type: "application/json" });
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `urbanpulse-alert-${result.alert.code}.json` });
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const view = result?.status && CHECK[result.status];
+  return (
+    <section className="c-card" ref={cardRef}>
+      <div className="c-card-head"><h2>Got a forwarded flood message?</h2></div>
+      <p className="muted small" style={{ margin: "0 0 10px" }}>Every official alert ends with "Verify: UP-…". Paste the message or just its code to check it is real and unchanged.</p>
+      <form className="inline-form" onSubmit={(e) => { e.preventDefault(); if (code.trim()) check(code); }}>
+        <input className="input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste the message or UP-1A2B3C4D" aria-label="Alert message or code" autoCapitalize="characters" spellCheck={false} />
+        <button className="btn" disabled={checking || !code.trim()}>{checking ? "Checking…" : "Check"}</button>
+      </form>
+      {result?.error && <div className="form-error" role="alert" style={{ marginTop: 10, marginBottom: 0 }}>{result.error}</div>}
+      {view && (
+        <div className={`c-status ${view.tone}`} role="status" style={{ marginTop: 12 }}>
+          <div className="c-status-title" style={{ fontSize: 17 }}>{view.title}</div>
+          <p className="small" style={{ margin: "4px 0 0" }}>{view.text}</p>
+          {result.alert && (
+            <>
+              <div className="c-alert" style={{ borderLeftColor: SEV_COLOR[result.alert.severity] ?? SEV_COLOR.info, marginTop: 10, marginBottom: 6 }}>
+                <div className="c-alert-meta"><span>{result.alert.code}</span><span>·</span><span>{result.alert.zone}</span><span>·</span><span>{new Date(result.alert.issuedAt).toLocaleString()}</span></div>
+                <div className="c-alert-text">{result.alert.message}</div>
+              </div>
+              <div className="small" style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                {result.explorer && result.txHash && <a href={`${result.explorer}/tx/${result.txHash}`} target="_blank" rel="noreferrer">View blockchain record ↗</a>}
+                {result.proof && <button type="button" className="link-btn" onClick={downloadProof}>Download proof</button>}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function readSavedArea() {
   try {
     return localStorage.getItem(AREA_KEY);
@@ -43,6 +135,7 @@ export default function Citizen() {
   const [geoError, setGeoError] = useState("");
   const [locating, setLocating] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [checkRequest, setCheckRequest] = useState(null);
   const evac = useEvacuation();
   const { planFrom, clear } = evac;
   const autoPlannedFor = useRef(null);
@@ -180,9 +273,16 @@ export default function Citizen() {
               <span>{b.zoneName}</span><span>·</span><span>{timeAgo(b.ts)}</span>
             </div>
             <div className="c-alert-text">{b.message}</div>
+            {b.code && (
+              <div className="c-alert-meta" style={{ marginTop: 6, marginBottom: 0 }}>
+                <button type="button" className="link-btn" onClick={() => setCheckRequest({ code: b.code })}>Check it&apos;s genuine</button>
+              </div>
+            )}
           </div>
         ))}
       </section>
+
+      <AlertCheck request={checkRequest} />
 
       <button className="btn danger c-report-btn" onClick={() => setReportOpen(true)}>🚨 Report flooding near me</button>
 

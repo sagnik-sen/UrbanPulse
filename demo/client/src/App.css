@@ -307,6 +307,9 @@ a.feed-item:hover { background: #1c1c1a; }
 .c-alert { border-left: 3px solid; background: #141414; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
 .c-alert-meta { display: flex; gap: 6px; align-items: center; font-size: 11px; color: #898781; margin-bottom: 4px; }
 .c-alert-text { font-size: 13.5px; line-height: 1.45; }
+.link-btn { background: none; border: none; padding: 0; color: #7fb2f0; font: inherit; cursor: pointer; text-decoration: underline; }
+.link-btn:hover { color: #a9cbf5; }
+.c-status a { color: #7fb2f0; }
 .new-pill { background: #d03b3b; color: #fff; font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
 .c-report-btn { width: 100%; padding: 14px; font-size: 15px; border-radius: 12px; }
 .c-phone { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #202020; color: #fff; text-decoration: none; font-size: 14px; gap: 12px; }

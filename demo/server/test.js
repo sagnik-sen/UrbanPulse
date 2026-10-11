@@ -7,7 +7,7 @@ const { assignEvacuees, assignGreedyNearest } = require("./assignment");
 const { planGroups } = require("./planner");
 const { parseRainfall, intensityLabel, createRainfallFeed, buildUrl } = require("./rainfall");
 const { openDb } = require("./db");
-const { leafHash, merkleRoot, checkBatch } = require("./anchor");
+const { leafHash, merkleRoot, merkleProof, rootFromProof, checkBatch } = require("./anchor");
 const { createZones, stepZones, injectStorm, seededRng } = require("./simulator");
 const { createAuth, hashPassword, verifyPassword, requireRole } = require("./auth");
 
@@ -379,6 +379,33 @@ test("anchored audit batch verifies, and edits or deletions are caught", () => {
 
   // a batch the chain has no record of is never trusted
   assert.equal(checkBatch(db.batchEntries(0), null).intact, false);
+});
+
+test("every leaf's inclusion proof rebuilds the root, and a changed leaf does not", () => {
+  for (let n = 1; n <= 9; n++) {
+    const leaves = Array.from({ length: n }, (_, i) => leafHash({ id: `p${i}`, ts: i, username: null, role: null, action: "alert_published", details: "{}" }));
+    const root = merkleRoot(leaves);
+    leaves.forEach((leaf, i) => {
+      const proof = merkleProof(leaves, i);
+      assert.equal(rootFromProof(leaf, proof), root, `n=${n} i=${i}`);
+      assert.ok(proof.length <= Math.ceil(Math.log2(n)));
+      const other = leafHash({ id: `p${i}`, ts: i, username: null, role: null, action: "alert_published", details: '{"x":1}' });
+      if (n > 1) assert.notEqual(rootFromProof(other, proof), root);
+    });
+  }
+});
+
+test("public alert records are found by code and carry no staff identity", () => {
+  const db = openDb(":memory:");
+  db.logAudit({ id: "x1", ts: 5, username: null, role: null, action: "alert_published", details: { code: "UP-ABCD1234", zone: "Velachery", message: "Move to higher ground" } });
+  db.logAudit({ id: "x2", ts: 6, username: "admin", role: "admin", action: "broadcast_sent", details: { code: "UP-ABCD1234" } });
+  const row = db.findAlert("UP-ABCD1234");
+  assert.equal(row.id, "x1");
+  assert.equal(row.username, null);
+  assert.equal(row.batch_id, null, "pending until anchored");
+  assert.equal(db.findAlert("UP-00000000"), undefined);
+  anchorAll(db);
+  assert.equal(db.findAlert("UP-ABCD1234").batch_id, 0);
 });
 
 test("entries logged after anchoring wait for the next batch", () => {

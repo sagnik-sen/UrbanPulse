@@ -136,14 +136,22 @@ function currentSnapshot() {
   });
 }
 
+const MESSAGE_MAX = 300;
 function addBroadcast({ zoneId, severity, message, channels, source }) {
   const zone = LOCATIONS.find((l) => l.id === zoneId);
   const recipients = zone ? zone.population : LOCATIONS.reduce((s, l) => s + l.population, 0);
-  const b = { id: randomUUID(), zoneId, zoneName: zone ? zone.name : "All zones", severity, message, channels, source, recipients, ts: Date.now() };
+  const id = randomUUID();
+  const code = `UP-${id.slice(0, 8).toUpperCase()}`;
+  // the code travels inside the text itself, so a forwarded copy still carries it
+  const suffix = ` Verify: ${code}`;
+  message = message.slice(0, MESSAGE_MAX - suffix.length) + suffix;
+  const b = { id, code, zoneId, zoneName: zone ? zone.name : "All zones", severity, message, channels, source, recipients, ts: Date.now() };
   broadcasts.unshift(b);
   broadcasts = broadcasts.slice(0, BROADCASTS_CAP);
   saveBroadcast(b);
   io.emit("broadcast", b);
+  // public record with no staff identity, so its blockchain proof can be handed to anyone
+  audit(null, "alert_published", { code, zoneId, zone: b.zoneName, severity, message, channels, source });
   return b;
 }
 
@@ -584,7 +592,7 @@ app.post("/api/evacuation-plan/execute", requireRole(...RESPONDERS), (req, res) 
   res.json({ ok: true, heldSeats: plan.metrics.assigned, unassigned, zones: request.zoneIds.length });
 });
 
-const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link"]);
+const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published"]);
 
 app.get("/api/audit", requireRole("admin"), (req, res) => {
   const action = AUDIT_ACTIONS.has(req.query.action) ? req.query.action : undefined;
@@ -594,6 +602,30 @@ app.get("/api/audit", requireRole("admin"), (req, res) => {
 
 app.get("/api/audit/chain", requireRole("admin"), (req, res) => {
   res.json({ enabled: chain.enabled, canWrite: chain.canWrite, contract: chain.address ?? null, chainId: chain.chainId ?? null, network: deployment?.network ?? null, explorer: deployment?.explorer ?? null });
+});
+
+// Public: is this forwarded flood alert real? Answers from the anchored audit record, not the
+// broadcasts table, so it reflects exactly what was sealed (and survives clearing demo data).
+const ALERT_CODE = /^UP-[0-9A-F]{8}$/;
+app.get("/api/alerts/verify/:code", async (req, res) => {
+  const code = String(req.params.code).trim().toUpperCase();
+  if (!ALERT_CODE.test(code)) return res.status(400).json({ error: "Alert codes look like UP-1A2B3C4D" });
+  const row = db.findAlert(code);
+  if (!row) return res.status(404).json({ found: false });
+  const d = JSON.parse(row.details);
+  const out = {
+    found: true,
+    alert: { code, zone: d.zone, severity: d.severity, message: d.message, source: d.source, issuedAt: row.ts },
+    explorer: deployment?.explorer ?? null,
+    txHash: row.tx_hash ?? null,
+  };
+  if (!chain.enabled) return res.json({ ...out, status: "unavailable" });
+  if (row.batch_id == null) return res.json({ ...out, status: "pending" });
+  try {
+    res.json({ ...out, ...(await chain.verifyEntry(row.id, row.batch_id)) });
+  } catch {
+    res.json({ ...out, status: "unreachable" });
+  }
 });
 
 const chainError = (res, err) => res.status(502).json({ error: `Blockchain unreachable: ${err.shortMessage || err.message}` });

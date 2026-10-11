@@ -105,6 +105,12 @@ function openDb(file = path.join(DATA_DIR, "urbanpulse.db")) {
     anchorBatches() {
       return db.prepare("SELECT * FROM anchor_batches ORDER BY id").all();
     },
+    // the public record of an official alert, looked up by the code citizens see
+    findAlert(code) {
+      return db.prepare(`SELECT a.*, x.batch_id, b.tx_hash FROM audit a
+        LEFT JOIN audit_anchor x ON x.audit_id = a.id LEFT JOIN anchor_batches b ON b.id = x.batch_id
+        WHERE a.action = 'alert_published' AND json_extract(a.details, '$.code') = ? LIMIT 1`).get(code);
+    },
     // anchor records of a batch in anchoring order, with the entry each points to (entry columns null if deleted)
     batchEntries(batchId) {
       return db.prepare(`SELECT x.audit_id, x.leaf, a.id, a.ts, a.username, a.role, a.action, a.details

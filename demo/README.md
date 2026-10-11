@@ -48,7 +48,7 @@ Override the demo passwords with `UP_ADMIN_PASSWORD`, `UP_OFFICER_PASSWORD` and
 - **Citizen app** (`/citizen`, also linked from the sidebar): mobile-first public view with area status in plain language, the forecast, an automatic safe route when your area floods, official alerts, the report form and tap-to-call emergency numbers
 - **Live rainfall**: real per-zone rain on the Overview, an hourly 24 h rain chart on Zone Detail, a rain line on sensor cards and in the citizen app
 - **Audit Log** (admin): every staff action and sign-in attempt (thresholds, storms, dispatches, notes, report status, broadcasts, evacuation orders, rain link, failed/locked sign-ins), live, searchable, exportable as CSV. It is append-only, kept when demo data is cleared, and anchored to the Shardeum blockchain: **Anchor now** / **Verify on chain** show each entry as verified or tampered
-- **Analytics**, **Architecture** (8-layer diagram marking what's prototyped), **Settings** (live thresholds + Storm Simulator)
+- **Analytics**, **Architecture** (9-layer diagram marking what runs in the demo and what is planned), **Settings** (live thresholds + Storm Simulator)
 
 ## Demo script (about 3 minutes)
 
@@ -99,9 +99,28 @@ new entries; admins can also anchor immediately.
 - Signing key: `SHARDEUM_PRIVATE_KEY` in `server/.env` (git-ignored). Without it the app still runs, entries stay "pending", and verification still works read-only
 - Change the contract: edit the `.sol`, then `node chain/compile.js` and `node chain/deploy.js` (deploying starts a fresh, empty ledger)
 
+**Citizen alert check (fake forwarded messages).** Every broadcast, manual or automated, ends
+with a code such as `Verify: UP-1A2B3C4D` (inside the text, so forwarded copies keep it) and gets a public audit record with no staff identity in it. In the citizen
+app, "Got a forwarded flood message?" (paste the message or the code, or open a link like `/citizen?verify=UP-1A2B3C4D`) shows whether
+the alert is genuine and unchanged: verified, pending (sealed within 5 minutes), altered, or not an
+official alert. "Download proof" saves the entry with its Merkle inclusion proof, which anyone can
+check against the contract without trusting the UrbanPulse server (the script pins the contract
+address from `deployment.json`, so a proof pointing at another contract is rejected):
+
+```bash
+node chain/verify-proof.js urbanpulse-alert-UP-1A2B3C4D.json
+```
+
 Tamper demo: anchor, then run `node chain/tamper-demo.js` in `demo/server` (it edits the newest
 anchored entry directly in SQLite, as an insider would), then press **Verify on chain**. That row
-turns red. `node chain/tamper-demo.js --undo` restores it.
+turns red. `node chain/tamper-demo.js --alert` instead rewrites the newest anchored public alert
+into a hoax ("Chembarambakkam lake breached…"); checking its code in the citizen app then shows
+"Record altered". `node chain/tamper-demo.js --undo` restores either.
+
+Tamper experiment (offline, no gas): `node experiments/tamper.js --seeds 200` applies ten kinds
+of insider tampering to seeded logs and runs the server's own verification; it writes
+`experiments/results/tamper.md` (detection and precision per attack, verification time up to
+100,000 entries, inclusion-proof sizes).
 
 Measured on Mezame: deploy 537k gas (~620 test SHM); the first batch 93k gas (~107 test SHM, it
 initialises the batch list), later batches ~76k gas (~88 test SHM) whether they hold 1, 50 or 500
@@ -109,7 +128,9 @@ entries (gas estimates), since only the root is stored. Confirmation took ~3 s.
 
 Limits: the demo has one key, so multi-agency signing is simulated (the contract supports more
 agencies via `setAgency`). Entries are protected from the moment they are anchored, not before,
-so the up-to-5-minute pending window is unprotected. Being append-only, the log also grows without
+so the up-to-5-minute pending window is unprotected. The server holds both the database and the
+signing key: whoever compromises it cannot rewrite anchored history, but can anchor false new
+entries from then on; independent agency keys on separate machines would limit that. Being append-only, the log also grows without
 a cap (failed sign-ins from unknown users included).
 
 ## Talking points
