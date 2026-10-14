@@ -17,7 +17,12 @@ const ACTIONS = {
   demo_data_cleared: { label: "Demo data cleared", tone: "danger" },
   rain_link: { label: "Rain link changed", tone: "neutral" },
   alert_published: { label: "Public alert record", tone: "info" },
+  incident_opened: { label: "Incident opened", tone: "warn" },
+  incident_cleared: { label: "Incident cleared", tone: "neutral" },
 };
+
+// who acts when no staff member is signed in
+const SYSTEM_ACTOR = { alert_published: "public", incident_opened: "system", incident_cleared: "system" };
 
 // one readable sentence per entry
 function describe(e) {
@@ -37,6 +42,8 @@ function describe(e) {
     case "demo_data_cleared": return "Cleared all reports, incidents and broadcasts";
     case "alert_published": return `${d.code}: ${d.severity} ${d.source === "auto" ? "automated" : "manual"} alert to ${d.zone}: "${d.message}"`;
     case "rain_link": return d.enabled ? "Linked simulation to live rainfall" : "Unlinked simulation from live rainfall";
+    case "incident_opened": return `${d.zone} reached ${d.level}%`;
+    case "incident_cleared": return `${d.zone} back to ${d.level}% (${d.how})`;
     default: return JSON.stringify(d);
   }
 }
@@ -155,7 +162,7 @@ export default function Audit() {
               return (
                 <tr key={e.id}>
                   <td className="mono" title={new Date(e.ts).toLocaleString()}>{new Date(e.ts).toLocaleTimeString()}<div className="muted small">{new Date(e.ts).toLocaleDateString()}</div></td>
-                  <td>{e.username ?? <span className="muted">{e.action === "alert_published" ? "public" : "unknown"}</span>}{e.role && <div className="muted small">{e.role}</div>}</td>
+                  <td>{e.username ?? <span className="muted">{SYSTEM_ACTOR[e.action] ?? "unknown"}</span>}{e.role && <div className="muted small">{e.role}</div>}</td>
                   <td><span className={`audit-tag ${a.tone}`}>{a.label}</span></td>
                   <td className="audit-details">{describe(e)}</td>
                   {chain?.enabled && <td><ChainCell e={e} verdict={verify?.rows?.[e.id]} explorer={chain.explorer} /></td>}

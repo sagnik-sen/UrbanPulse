@@ -13,6 +13,7 @@ import CitizenReports from "./pages/CitizenReports";
 import Broadcasts from "./pages/Broadcasts";
 import Shelters from "./pages/Shelters";
 import Analytics from "./pages/Analytics";
+import Accountability from "./pages/Accountability";
 import Architecture from "./pages/Architecture";
 import Settings from "./pages/Settings";
 import Citizen from "./pages/Citizen";
@@ -40,6 +41,7 @@ export default function App() {
               <Route path="broadcasts" element={<Broadcasts />} />
               <Route path="shelters" element={<Shelters />} />
               <Route path="analytics" element={<Analytics />} />
+              <Route path="accountability" element={<Accountability />} />
               <Route path="architecture" element={<Architecture />} />
               <Route path="settings" element={<RequireAuth roles={["admin"]}><Settings /></RequireAuth>} />
               <Route path="audit" element={<RequireAuth roles={["admin"]}><Audit /></RequireAuth>} />

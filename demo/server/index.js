@@ -14,6 +14,7 @@ const { createAuth, attachUser, requireRole } = require("./auth");
 const { createZones, createShelters, stepZones, injectStorm } = require("./simulator");
 const { createRainfallFeed } = require("./rainfall");
 const { createAnchor } = require("./anchor");
+const { buildTimelines, summarize } = require("./accountability");
 
 // optional server/.env holds the signing key for blockchain anchoring; the app runs without it
 try { process.loadEnvFile(path.join(__dirname, ".env")); } catch {}
@@ -171,6 +172,7 @@ function updateIncidents(payload) {
         incidents = incidents.slice(0, INCIDENTS_CAP);
         saveIncident(inc);
         toStaff("incident-opened", inc);
+        audit(null, "incident_opened", { incidentId: inc.id, zoneId: p.id, zone: p.name, level: p.level });
         addBroadcast({ zoneId: p.id, severity: "danger", message: `FLOOD WARNING: Water levels critical in ${p.name}. Move to higher ground or the nearest relief shelter.`, channels: ["sms", "push"], source: "auto" });
       } else if (open) {
         open.currentLevel = p.level;
@@ -185,6 +187,7 @@ function updateIncidents(payload) {
       open.log.push({ ts: p.ts, text: `Level receded to ${p.level}% — incident auto-cleared` });
       saveIncident(open);
       toStaff("incident-updated", open);
+      audit(null, "incident_cleared", { incidentId: open.id, zoneId: open.zoneId, zone: open.zoneName, level: p.level, how: "auto" });
     }
   });
 }
@@ -362,6 +365,10 @@ app.post("/api/broadcasts", requireRole("admin"), (req, res) => {
 
 // wipes reports, incidents and broadcasts (they persist across restarts now, so test runs pile up)
 app.post("/api/admin/clear-data", requireRole("admin"), (req, res) => {
+  // close open incidents in the audit trail too, or their timelines stay open forever
+  for (const inc of incidents.filter((i) => i.status !== "cleared")) {
+    audit(req.user, "incident_cleared", { incidentId: inc.id, zoneId: inc.zoneId, zone: inc.zoneName, level: inc.currentLevel, how: "demo data cleared" });
+  }
   db.clearRecords();
   incidents = [];
   citizenReports = [];
@@ -592,7 +599,7 @@ app.post("/api/evacuation-plan/execute", requireRole(...RESPONDERS), (req, res) 
   res.json({ ok: true, heldSeats: plan.metrics.assigned, unassigned, zones: request.zoneIds.length });
 });
 
-const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published"]);
+const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared"]);
 
 app.get("/api/audit", requireRole("admin"), (req, res) => {
   const action = AUDIT_ACTIONS.has(req.query.action) ? req.query.action : undefined;
@@ -647,6 +654,13 @@ app.get("/api/audit/verify", requireRole("admin"), async (req, res) => {
   } catch (err) {
     chainError(res, err);
   }
+});
+
+// response times per incident, timed from the audit log (accountability.js)
+const ACCOUNTABILITY_ACTIONS = ["incident_opened", "incident_cleared", "alert_published", "team_dispatched", "evacuation_order"];
+app.get("/api/accountability", requireRole(...STAFF), (req, res) => {
+  const timelines = buildTimelines(db.auditByActions(ACCOUNTABILITY_ACTIONS));
+  res.json({ timelines, summary: summarize(timelines) });
 });
 
 const PORT = 4000;

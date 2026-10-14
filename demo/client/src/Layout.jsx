@@ -30,6 +30,7 @@ export default function Layout() {
     { to: "/broadcasts", label: "Broadcasts" },
     { to: "/shelters", label: "Relief Shelters" },
     { to: "/analytics", label: "Analytics" },
+    { to: "/accountability", label: "Accountability" },
     { to: "/architecture", label: "Architecture" },
     can.manage && { to: "/audit", label: "Audit Log" },
     can.manage && { to: "/settings", label: "Settings" },

@@ -85,6 +85,13 @@ function openDb(file = path.join(DATA_DIR, "urbanpulse.db")) {
       const rows = action ? db.prepare(sql).all(action, limit) : db.prepare(sql).all(limit);
       return rows.map((r) => ({ ...r, details: JSON.parse(r.details) }));
     },
+    // oldest first, so a timeline reads in the order things happened
+    auditByActions(actions) {
+      const rows = db.prepare(`SELECT a.*, x.batch_id, b.tx_hash FROM audit a
+        LEFT JOIN audit_anchor x ON x.audit_id = a.id LEFT JOIN anchor_batches b ON b.id = x.batch_id
+        WHERE a.action IN (${actions.map(() => "?").join(", ")}) ORDER BY a.ts, a.rowid`).all(...actions);
+      return rows.map((r) => ({ ...r, details: JSON.parse(r.details) }));
+    },
 
     // blockchain anchoring (anchor.js): rows come back raw so hashes match the stored text exactly
     unanchoredAudit(limit) {
