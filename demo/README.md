@@ -74,7 +74,7 @@ cd demo/server && npm test
 
 Covers the forecast model, forecast-based flood risk, route scoring and detours, optimal
 shelter assignment (checked against brute force), the shared group planner, the seeded
-simulator, SQLite storage and sign-in/roles. The shelter assignment solver is successive shortest paths with Bellman-Ford that skips unchanged nodes, which gives plans identical to the old full sweep; the planning timings at 6 to 200 wards are in `server/experiments/results/scale.md`.
+simulator, SQLite storage and sign-in/roles. The shelter assignment solver is successive shortest paths with Bellman-Ford that skips unchanged nodes, which gives plans identical to the old full sweep; the planning timings at 6 to 200 wards are in `server/experiments/results/scale.md`. Zone lookup during route scoring uses a grid index over zone centres (`server/risk.js`), which returns the same zone as a linear scan, and its effect on those timings is also in `scale.md`.
 
 ## Citizen report fusion
 

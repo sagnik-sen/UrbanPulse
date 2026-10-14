@@ -1,7 +1,7 @@
 # City-scale benchmark (scale)
 
 Machine: Apple M5, 10 CPU cores, Node v24.19.0, darwin arm64.
-Benchmark runtime: 13.9 s. Median of 7 runs after 2 warm-up runs (performance.now); heap is the heapUsed change over one pass of all four steps, with a forced GC before the first reading and none after. Heap is a single sample, so it is noisy across N and is not a trend.
+Benchmark runtime: 4.8 s. Median of 7 runs after 2 warm-up runs (performance.now); heap is the heapUsed change over one pass of all four steps, with a forced GC before the first reading and none after. Heap is a single sample, so it is noisy across N and is not a trend.
 
 Data: `experiments/data/chennai-wards.json`, 200 Greater Chennai Corporation wards. Source: Chennai Wards.geojson, DataMeet Municipal_Spatial_Data (data from Transparent Chennai), https://github.com/datameet/Municipal_Spatial_Data/tree/master/Chennai. Licence: CC BY-SA 2.5 India (derived centroids and areas). Ward centroids and areas come from that file.
 
@@ -20,11 +20,11 @@ Data: `experiments/data/chennai-wards.json`, 200 Greater Chennai Corporation war
 
 | Zones (N) | Groups | Shelters | Tick ms (% of 2,000 ms) | Fusion ms (% of 2,000 ms) | Plan ms per request (pairs) | Anchor ms + verify ms (entries) | Heap MB (one pass) |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 6 (demo) | 1 | 6 | 0.20 (0.01%) | 0.74 (0.04%) | 0.37 (6) | 2.99 + 2.72 (80) | 1.8 |
-| 50 | 10 | 25 | 1.61 (0.08%) | 0.90 (0.04%) | 16.9 (250) | 11.2 + 10.6 (300) | 8.4 |
-| 100 | 20 | 50 | 2.99 (0.15%) | 1.32 (0.07%) | 122.3 (1,000) | 19.4 + 18.7 (550) | 18.3 |
-| 200 | 40 | 100 | 5.79 (0.29%) | 1.57 (0.08%) | 920.3 (4,000) | 36.3 + 34.7 (1,050) | 35.8 |
+| 6 (demo) | 1 | 6 | 0.19 (0.01%) | 0.75 (0.04%) | 0.37 (6) | 2.96 + 2.70 (80) | 1.8 |
+| 50 | 10 | 25 | 1.55 (0.08%) | 0.87 (0.04%) | 7.31 (250) | 10.4 + 10.1 (300) | 11.0 |
+| 100 | 20 | 50 | 2.91 (0.15%) | 1.16 (0.06%) | 34.4 (1,000) | 18.9 + 18.4 (550) | 17.4 |
+| 200 | 40 | 100 | 6.04 (0.30%) | 1.53 (0.08%) | 208.9 (4,000) | 36.9 + 34.4 (1,050) | 16.6 |
 
 Tick and fusion are compared with the 2,000 ms budget of one live tick (the server ticks every 2 s). Plan is per request.
 
-Fastest growth from N=50 to N=200 (zones x4): plan, x54.4. Others: tick x3.6, fusion x1.7, anchor+verify x3.3.
+Fastest growth from N=50 to N=200 (zones x4): plan, x28.6. Others: tick x3.9, fusion x1.7, anchor+verify x3.5.
