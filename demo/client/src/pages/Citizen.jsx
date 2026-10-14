@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { MapContainer, TileLayer } from "react-leaflet";
 import { useFloodData } from "../FloodDataContext";
-import { STATUS, timeAgo, rainLabel, hourLabel } from "../constants";
+import { STATUS, rainLabel, hourLabel } from "../constants";
+import { t, useLang } from "../i18n";
 import MapReady from "../MapReady";
 import ReportModal from "../ReportModal";
 import Toasts from "../Toasts";
@@ -12,25 +13,36 @@ const AREA_KEY = "urbanpulse.citizen.area";
 const SEV_COLOR = { info: "#3987e5", warning: "#fab219", danger: "#d03b3b" };
 
 const GUIDANCE = {
-  danger: { title: "Flooding in your area", text: "Move to higher ground or the nearest relief shelter now. Do not walk or drive through moving water." },
-  warning: { title: "Water levels rising", text: "Stay alert. Avoid low-lying roads and underpasses, and keep phones charged and documents in a waterproof bag." },
-  safe: { title: "No flood risk right now", text: "Conditions are normal. Keep this page handy during the monsoon season." },
+  danger: { title: "guide.danger.title", text: "guide.danger.text" },
+  warning: { title: "guide.warning.title", text: "guide.warning.text" },
+  safe: { title: "guide.safe.title", text: "guide.safe.text" },
 };
 
 const EMERGENCY = [
-  { label: "GCC Flood Helpline", number: "1913" },
-  { label: "Emergency (Police / Fire / Ambulance)", number: "112" },
-  { label: "TN State Disaster Control Room", number: "1070" },
+  { label: "emergency.helpline", number: "1913" },
+  { label: "emergency.emergency", number: "112" },
+  { label: "emergency.state", number: "1070" },
 ];
 
-const CHECK = {
-  verified: { tone: "safe", title: "✓ Genuine official alert", text: "Issued by UrbanPulse and sealed on the Shardeum blockchain. The text below is exactly what was sent." },
-  pending: { tone: "warning", title: "Official alert, seal pending", text: "Issued by UrbanPulse in the last few minutes. It is sealed on the blockchain within 5 minutes." },
-  unreachable: { tone: "warning", title: "Official alert found", text: "The blockchain check is unavailable right now. Compare the text below with the message you received." },
-  unavailable: { tone: "warning", title: "Official alert found", text: "Compare the text below with the message you received." },
-  tampered: { tone: "danger", title: "✗ Record altered", text: "Our record of this alert no longer matches its blockchain seal. Do not act on it; call 1913." },
-  notfound: { tone: "danger", title: "✗ Not an official alert", text: "No UrbanPulse alert has this code. Treat the message as a rumour and do not forward it." },
+// rainLabel() returns these English labels; they map to translation keys
+const RAIN_KEY = {
+  "No rain": "rain.none",
+  "Light rain": "rain.light",
+  "Moderate rain": "rain.moderate",
+  "Heavy rain": "rain.heavy",
+  "Very heavy rain": "rain.veryHeavy",
 };
+
+const CHECK = {
+  verified: { tone: "safe" },
+  pending: { tone: "warning" },
+  unreachable: { tone: "warning" },
+  unavailable: { tone: "warning" },
+  tampered: { tone: "danger" },
+  notfound: { tone: "danger" },
+};
+
+const langButtonStyle = (on) => (on ? { color: "#fff", borderColor: "#3987e5" } : undefined);
 
 // accepts the whole pasted message, "UP-1A2B3C4D", "up-1a2b3c4d" or just the 8 characters
 const normalizeCode = (raw) => {
@@ -43,7 +55,7 @@ const normalizeCode = (raw) => {
 // Forwarded flood messages are a known problem in Chennai; every official alert carries a code
 // that anyone can check against its blockchain seal.
 // request: { code } set by an alert's "Check it's genuine" link (a new object each click)
-function AlertCheck({ request }) {
+function AlertCheck({ request, lang }) {
   const [params] = useSearchParams();
   const [code, setCode] = useState(params.get("verify") ?? "");
   const [result, setResult] = useState(null);
@@ -58,10 +70,10 @@ function AlertCheck({ request }) {
       const res = await fetch(`/api/alerts/verify/${encodeURIComponent(c)}`);
       const data = await res.json().catch(() => ({}));
       if (res.status === 404) setResult({ status: "notfound", code: c });
-      else if (!res.ok) setResult({ error: data.error || "Could not check right now" });
+      else if (!res.ok) setResult(data.error ? { error: data.error } : { errorKey: "verify.failed" });
       else setResult(data);
     } catch {
-      setResult({ error: "Could not reach UrbanPulse. Check your connection." });
+      setResult({ errorKey: "verify.offline" });
     } finally {
       setChecking(false);
     }
@@ -82,20 +94,21 @@ function AlertCheck({ request }) {
     URL.revokeObjectURL(a.href);
   };
 
+  const errorText = result?.errorKey ? t(lang, result.errorKey) : result?.error;
   const view = result?.status && CHECK[result.status];
   return (
     <section className="c-card" ref={cardRef}>
-      <div className="c-card-head"><h2>Got a forwarded flood message?</h2></div>
-      <p className="muted small" style={{ margin: "0 0 10px" }}>Every official alert ends with "Verify: UP-…". Paste the message or just its code to check it is real and unchanged.</p>
+      <div className="c-card-head"><h2>{t(lang, "verify.title")}</h2></div>
+      <p className="muted small" style={{ margin: "0 0 10px" }}>{t(lang, "verify.help")}</p>
       <form className="inline-form" onSubmit={(e) => { e.preventDefault(); if (code.trim()) check(code); }}>
-        <input className="input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste the message or UP-1A2B3C4D" aria-label="Alert message or code" autoCapitalize="characters" spellCheck={false} />
-        <button className="btn" disabled={checking || !code.trim()}>{checking ? "Checking…" : "Check"}</button>
+        <input className="input" value={code} onChange={(e) => setCode(e.target.value)} placeholder={t(lang, "verify.placeholder")} aria-label={t(lang, "verify.aria")} autoCapitalize="characters" spellCheck={false} />
+        <button className="btn" disabled={checking || !code.trim()}>{checking ? t(lang, "verify.checking") : t(lang, "verify.check")}</button>
       </form>
-      {result?.error && <div className="form-error" role="alert" style={{ marginTop: 10, marginBottom: 0 }}>{result.error}</div>}
+      {errorText && <div className="form-error" role="alert" style={{ marginTop: 10, marginBottom: 0 }}>{errorText}</div>}
       {view && (
         <div className={`c-status ${view.tone}`} role="status" style={{ marginTop: 12 }}>
-          <div className="c-status-title" style={{ fontSize: 17 }}>{view.title}</div>
-          <p className="small" style={{ margin: "4px 0 0" }}>{view.text}</p>
+          <div className="c-status-title" style={{ fontSize: 17 }}>{t(lang, `check.${result.status}.title`)}</div>
+          <p className="small" style={{ margin: "4px 0 0" }}>{t(lang, `check.${result.status}.text`)}</p>
           {result.alert && (
             <>
               <div className="c-alert" style={{ borderLeftColor: SEV_COLOR[result.alert.severity] ?? SEV_COLOR.info, marginTop: 10, marginBottom: 6 }}>
@@ -103,8 +116,8 @@ function AlertCheck({ request }) {
                 <div className="c-alert-text">{result.alert.message}</div>
               </div>
               <div className="small" style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {result.explorer && result.txHash && <a href={`${result.explorer}/tx/${result.txHash}`} target="_blank" rel="noreferrer">View blockchain record ↗</a>}
-                {result.proof && <button type="button" className="link-btn" onClick={downloadProof}>Download proof</button>}
+                {result.explorer && result.txHash && <a href={`${result.explorer}/tx/${result.txHash}`} target="_blank" rel="noreferrer">{t(lang, "check.viewRecord")}</a>}
+                {result.proof && <button type="button" className="link-btn" onClick={downloadProof}>{t(lang, "check.download")}</button>}
               </div>
             </>
           )}
@@ -122,14 +135,23 @@ function readSavedArea() {
   }
 }
 
-function forecastText(hours) {
+function forecastText(lang, hours) {
   if (hours == null) return null;
   const minutes = Math.round(hours * 60);
-  return minutes < 60 ? `about ${minutes} minutes` : `about ${hours} hours`;
+  return minutes < 60 ? t(lang, "forecast.minutes", { n: minutes }) : t(lang, "forecast.hours", { n: hours });
+}
+
+// same time bands as constants.timeAgo, with translated wording
+function timeAgoText(lang, ts) {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 60) return t(lang, "ago.s", { n: s });
+  if (s < 3600) return t(lang, "ago.m", { n: Math.round(s / 60) });
+  return t(lang, "ago.h", { n: Math.round(s / 3600) });
 }
 
 export default function Citizen() {
   const { locations, broadcasts, connected, rainfall } = useFloodData();
+  const [lang, setLang] = useLang();
   const [areaId, setAreaId] = useState(readSavedArea);
   const [coords, setCoords] = useState(null);
   const [geoError, setGeoError] = useState("");
@@ -168,7 +190,7 @@ export default function Citizen() {
   };
 
   const useMyLocation = () => {
-    if (!navigator.geolocation) return setGeoError("Location isn't available on this device.");
+    if (!navigator.geolocation) return setGeoError("geo.unsupported");
     setLocating(true);
     setGeoError("");
     navigator.geolocation.getCurrentPosition(
@@ -182,60 +204,66 @@ export default function Citizen() {
         setLocating(false);
       },
       () => {
-        setGeoError("Couldn't get your location. Pick your area from the list instead.");
+        setGeoError("geo.failed");
         setLocating(false);
       },
       { timeout: 8000 }
     );
   };
 
-  if (!area) return <div className="citizen"><p className="muted" style={{ padding: 24 }}>Loading live flood data…</p></div>;
+  if (!area) return <div className="citizen" lang={lang === "ta" ? "ta" : "en"}><p className="muted" style={{ padding: 24 }}>{t(lang, "loading")}</p></div>;
 
   const guide = GUIDANCE[area.risk];
-  const soon = area.risk !== "danger" ? forecastText(area.forecastHours) : null;
+  const soon = area.risk !== "danger" ? forecastText(lang, area.forecastHours) : null;
   const alerts = broadcasts.filter((b) => b.zoneId === "all" || b.zoneId === area.id).slice(0, 5);
   const origin = coords ?? area;
 
   return (
-    <div className="citizen">
+    <div className="citizen" lang={lang === "ta" ? "ta" : "en"}>
       <header className="citizen-header">
         <div className="brand">
           <div className="brand-mark">UP</div>
           <div>
             <div className="brand-name">UrbanPulse Chennai</div>
-            <div className="brand-sub">Citizen flood information</div>
+            <div className="brand-sub">{t(lang, "brand.sub")}</div>
           </div>
         </div>
-        <span className="live-pill"><span className={`dot ${connected ? "on" : "off"}`} />{connected ? "Live" : "Offline"}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div role="group" aria-label={t(lang, "lang.label")} style={{ display: "flex", gap: 4 }}>
+            <button type="button" className="btn ghost" aria-pressed={lang === "en"} style={langButtonStyle(lang === "en")} onClick={() => setLang("en")}>{t(lang, "lang.en")}</button>
+            <button type="button" className="btn ghost" aria-pressed={lang === "ta"} style={langButtonStyle(lang === "ta")} onClick={() => setLang("ta")}>{t(lang, "lang.ta")}</button>
+          </div>
+          <span className="live-pill"><span className={`dot ${connected ? "on" : "off"}`} />{connected ? t(lang, "live") : t(lang, "offline")}</span>
+        </div>
       </header>
 
       <section className="c-card">
         <label className="field" style={{ marginBottom: 10 }}>
-          <span className="field-label">Your area</span>
+          <span className="field-label">{t(lang, "area.label")}</span>
           <select className="input" value={area.id} onChange={(e) => chooseArea(e.target.value)}>
             {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
         </label>
-        <button className="btn ghost full" onClick={useMyLocation} disabled={locating}>{locating ? "Locating…" : "📍 Use my location"}</button>
-        {coords && <div className="muted small" style={{ marginTop: 8 }}>Using your location · nearest sensor zone: {area.name}</div>}
-        {geoError && <div className="form-error" role="alert" style={{ marginTop: 10, marginBottom: 0 }}>{geoError}</div>}
+        <button className="btn ghost full" onClick={useMyLocation} disabled={locating}>{locating ? t(lang, "area.locating") : t(lang, "area.locate")}</button>
+        {coords && <div className="muted small" style={{ marginTop: 8 }}>{t(lang, "area.using", { name: area.name })}</div>}
+        {geoError && <div className="form-error" role="alert" style={{ marginTop: 10, marginBottom: 0 }}>{t(lang, geoError)}</div>}
       </section>
 
       <section className={`c-status ${area.risk}`} aria-live="polite">
         <div className="c-status-top">
-          <span className="badge"><span className="badge-dot" style={{ background: STATUS[area.risk].color }} />{STATUS[area.risk].label}</span>
-          <span className="muted small">Water level {area.level}%</span>
+          <span className="badge"><span className="badge-dot" style={{ background: STATUS[area.risk].color }} />{t(lang, `status.${area.risk}`)}</span>
+          <span className="muted small">{t(lang, "level", { level: area.level })}</span>
         </div>
-        <h1 className="c-status-title">{guide.title}</h1>
-        <p className="c-status-text">{guide.text}</p>
-        {soon && area.risk === "warning" && <p className="c-status-forecast">Forecast: may reach danger level in {soon}.</p>}
-        {soon && area.risk === "safe" && <p className="c-status-forecast">Forecast: levels rising, danger possible in {soon}.</p>}
+        <h1 className="c-status-title">{t(lang, guide.title)}</h1>
+        <p className="c-status-text">{t(lang, guide.text)}</p>
+        {soon && area.risk === "warning" && <p className="c-status-forecast">{t(lang, "forecast.warning", { when: soon })}</p>}
+        {soon && area.risk === "safe" && <p className="c-status-forecast">{t(lang, "forecast.rising", { when: soon })}</p>}
         {rainfall?.zones?.[area.id] && (() => {
           const r = rainfall.zones[area.id];
           return (
             <p className="c-rain">
-              🌧 {rainLabel(r.currentMmPerHr)} now ({r.currentMmPerHr} mm/h) · {r.next24hMm} mm expected in the next 24 h
-              {r.peakMmPerHr >= 2.5 && <> · heaviest around {hourLabel(r.peakAt)}</>}
+              {t(lang, "rain.line", { label: t(lang, RAIN_KEY[rainLabel(r.currentMmPerHr)]), mm: r.currentMmPerHr, next: r.next24hMm })}
+              {r.peakMmPerHr >= 2.5 && <> {t(lang, "rain.peak", { time: hourLabel(r.peakAt) })}</>}
             </p>
           );
         })()}
@@ -243,8 +271,8 @@ export default function Citizen() {
 
       <section className="c-card">
         <div className="c-card-head">
-          <h2>Nearest safe shelter</h2>
-          {!evac.plan && !evac.loading && <button className="btn" onClick={() => planFrom(origin.lat, origin.lng)}>Show safe route</button>}
+          <h2>{t(lang, "shelter.title")}</h2>
+          {!evac.plan && !evac.loading && <button className="btn" onClick={() => planFrom(origin.lat, origin.lng)}>{t(lang, "route.show")}</button>}
         </div>
         {(evac.plan || evac.loading || evac.error) ? (
           <>
@@ -253,55 +281,58 @@ export default function Citizen() {
                 <TileLayer attribution='&copy; OpenStreetMap &middot; OSRM' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 <MapReady />
                 <DangerZones locations={locations} />
-                <RouteLayer plan={evac.plan} />
+                <RouteLayer plan={evac.plan} lang={lang} />
               </MapContainer>
             </div>
-            <RouteSummary plan={evac.plan} loading={evac.loading} error={evac.error} />
+            <RouteSummary plan={evac.plan} loading={evac.loading} error={evac.error} lang={lang} />
           </>
         ) : (
-          <p className="muted small">Get a driving route to the nearest shelter with space, avoiding flooded areas.</p>
+          <p className="muted small">{t(lang, "route.intro")}</p>
         )}
       </section>
 
       <section className="c-card">
-        <div className="c-card-head"><h2>Official alerts</h2><span className="muted small">{area.name} &amp; city-wide</span></div>
-        {alerts.length === 0 && <p className="muted small">No alerts for your area.</p>}
+        <div className="c-card-head"><h2>{t(lang, "alerts.title")}</h2><span className="muted small">{t(lang, "alerts.scope", { area: area.name })}</span></div>
+        {lang === "ta" && <p className="muted small" style={{ margin: "0 0 10px" }}>{t(lang, "note.alertsEnglish")}</p>}
+        {alerts.length === 0 && <p className="muted small">{t(lang, "alerts.none")}</p>}
         {alerts.map((b) => (
           <div key={b.id} className="c-alert" style={{ borderLeftColor: SEV_COLOR[b.severity] ?? SEV_COLOR.info }}>
             <div className="c-alert-meta">
-              {Date.now() - b.ts < 60000 && <span className="new-pill">NEW</span>}
-              <span>{b.zoneName}</span><span>·</span><span>{timeAgo(b.ts)}</span>
+              {Date.now() - b.ts < 60000 && <span className="new-pill">{t(lang, "alerts.new")}</span>}
+              <span>{b.zoneName}</span><span>·</span><span>{timeAgoText(lang, b.ts)}</span>
             </div>
             <div className="c-alert-text">{b.message}</div>
             {b.code && (
               <div className="c-alert-meta" style={{ marginTop: 6, marginBottom: 0 }}>
-                <button type="button" className="link-btn" onClick={() => setCheckRequest({ code: b.code })}>Check it&apos;s genuine</button>
+                <button type="button" className="link-btn" onClick={() => setCheckRequest({ code: b.code })}>{t(lang, "alerts.check")}</button>
               </div>
             )}
           </div>
         ))}
       </section>
 
-      <AlertCheck request={checkRequest} />
+      <AlertCheck request={checkRequest} lang={lang} />
 
-      <button className="btn danger c-report-btn" onClick={() => setReportOpen(true)}>🚨 Report flooding near me</button>
+      <button className="btn danger c-report-btn" onClick={() => setReportOpen(true)}>{t(lang, "report.open")}</button>
 
       <section className="c-card">
-        <h2 style={{ marginBottom: 10 }}>Emergency numbers</h2>
+        <h2 style={{ marginBottom: 10 }}>{t(lang, "emergency.title")}</h2>
         {EMERGENCY.map((e) => (
           <a key={e.number} className="c-phone" href={`tel:${e.number}`}>
-            <span>{e.label}</span><strong>{e.number}</strong>
+            <span>{t(lang, e.label)}</span><strong>{e.number}</strong>
           </a>
         ))}
       </section>
 
-      <p className="muted small c-foot">Demo prototype. Water levels are simulated, not official data.</p>
+      <p className="muted small c-foot">{t(lang, "foot")}</p>
+      {lang === "ta" && <p className="muted small c-foot">{t(lang, "note.draft")}</p>}
 
       {reportOpen && (
         <ReportModal
           location={coords ?? undefined}
           defaultZoneId={area.id}
           onClose={() => setReportOpen(false)}
+          lang={lang}
         />
       )}
       <Toasts showLinks={false} kinds={["info"]} />
