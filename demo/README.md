@@ -117,6 +117,12 @@ new entries; admins can also anchor immediately.
 - Signing key: `SHARDEUM_PRIVATE_KEY` in `server/.env` (git-ignored). Without it the app still runs, entries stay "pending", and verification still works read-only
 - Change the contract: edit the `.sol`, then `node chain/compile.js` and `node chain/deploy.js` (deploying starts a fresh, empty ledger)
 
+**Second agency (Water Resources Department).** The Reservoir Desk's releases are signed by a
+separate wallet, `SHARDEUM_WRD_PRIVATE_KEY` in `server/.env`, so the ledger shows two independent
+agencies: reservoir releases are anchored by WRD and everything else by GCC. Register the WRD
+wallet once with the contract admin key: `node chain/add-agency.js <address> "UrbanPulse demo: WRD reservoir desk"`.
+The Audit Log marks WRD batches with "· WRD" and the release log shows "Sealed by WRD" for admins.
+
 **Citizen alert check (fake forwarded messages).** Every broadcast, manual or automated, ends
 with a code such as `Verify: UP-1A2B3C4D` (inside the text, so forwarded copies keep it) and gets a public audit record with no staff identity in it. In the citizen
 app, "Got a forwarded flood message?" (paste the message or the code, or open a link like `/citizen?verify=UP-1A2B3C4D`) shows whether
@@ -144,12 +150,20 @@ Measured on Mezame: deploy 537k gas (~620 test SHM); the first batch 93k gas (~1
 initialises the batch list), later batches ~76k gas (~88 test SHM) whether they hold 1, 50 or 500
 entries (gas estimates), since only the root is stored. Confirmation took ~3 s.
 
-Limits: the demo has one key, so multi-agency signing is simulated (the contract supports more
-agencies via `setAgency`). Entries are protected from the moment they are anchored, not before,
+Limits: both agency keys still live on one demo server; in deployment each agency would run its own
+signer. Entries are protected from the moment they are anchored, not before,
 so the up-to-5-minute pending window is unprotected. The server holds both the database and the
 signing key: whoever compromises it cannot rewrite anchored history, but can anchor false new
 entries from then on; independent agency keys on separate machines would limit that. Being append-only, the log also grows without
 a cap (failed sign-ins from unknown users included).
+
+Poster QR: in the Broadcasts page, a sealed alert has a **Poster QR** button. The QR encodes a link
+to `verify.html` (in `demo/verifier/`) with the alert's entry, its Merkle siblings and the sealing
+transaction hash in the URL fragment. Scanning it opens that page, which recomputes the fingerprint
+(Merkle root) on the viewer's phone, with no UrbanPulse server involved, and links to the Shardeum
+explorer transaction where the same fingerprint is stored. The page's contract and explorer
+address are fixed in the file. Set `VERIFIER_URL` in `client/src/verifier.js` to the public URL of the
+published `verify.html`; until then the QR is generated but flagged as not yet pointing anywhere.
 
 ## Talking points
 

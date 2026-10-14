@@ -19,6 +19,8 @@ const ACTIONS = {
   alert_published: { label: "Public alert record", tone: "info" },
   incident_opened: { label: "Incident opened", tone: "warn" },
   incident_cleared: { label: "Incident cleared", tone: "neutral" },
+  reservoir_release: { label: "Reservoir release", tone: "danger" },
+  sensor_status: { label: "Sensor status", tone: "warn" },
 };
 
 // who acts when no staff member is signed in
@@ -44,15 +46,18 @@ function describe(e) {
     case "rain_link": return d.enabled ? "Linked simulation to live rainfall" : "Unlinked simulation from live rainfall";
     case "incident_opened": return `${d.zone} reached ${d.level}%`;
     case "incident_cleared": return `${d.zone} back to ${d.level}% (${d.how})`;
+    case "reservoir_release": return `${d.reservoir}: ${d.cusecs} cusecs for ${d.durationHours} h ("${d.reason}")`;
+    case "sensor_status": return `${d.zone} sensor ${d.online ? "back online" : "taken offline"}`;
     default: return JSON.stringify(d);
   }
 }
 
 // blockchain column: verification result beats the stored anchor, which beats pending
-function ChainCell({ e, verdict, explorer }) {
+function ChainCell({ e, verdict, explorer, wrd }) {
   if (verdict === "tampered") return <span className="audit-tag danger" title="This entry no longer matches the hash anchored on-chain">✗ Tampered</span>;
   if (e.batch_id == null) return <span className="audit-tag neutral" title="Waiting for the next anchoring batch">Pending</span>;
-  const label = verdict === "verified" ? "✓ Verified" : `Anchored #${e.batch_id}`;
+  const signer = wrd && e.agency?.toLowerCase() === wrd.toLowerCase() ? " · WRD" : "";
+  const label = (verdict === "verified" ? "✓ Verified" : `Anchored #${e.batch_id}`) + signer;
   const tone = verdict === "verified" ? "ok" : "info";
   return explorer && e.tx_hash
     ? <a className={`audit-tag ${tone}`} href={`${explorer}/tx/${e.tx_hash}`} target="_blank" rel="noreferrer" title="Open the anchoring transaction">{label} ↗</a>
@@ -122,6 +127,8 @@ export default function Audit() {
     .then(([result, fresh]) => { setVerify(result); setEntries(fresh); })
     .catch((err) => setVerify({ error: err.message })));
 
+  const wrdAddress = chain?.agencies?.find((a) => a.key === "wrd")?.address;
+
   const exportCsv = () => downloadCsv("urbanpulse-audit-log.csv", rows.map((e) => ({
     time: new Date(e.ts).toISOString(), user: e.username ?? "", role: e.role ?? "", action: e.action, details: describe(e), anchor_tx: e.tx_hash ?? "",
   })));
@@ -165,7 +172,7 @@ export default function Audit() {
                   <td>{e.username ?? <span className="muted">{SYSTEM_ACTOR[e.action] ?? "unknown"}</span>}{e.role && <div className="muted small">{e.role}</div>}</td>
                   <td><span className={`audit-tag ${a.tone}`}>{a.label}</span></td>
                   <td className="audit-details">{describe(e)}</td>
-                  {chain?.enabled && <td><ChainCell e={e} verdict={verify?.rows?.[e.id]} explorer={chain.explorer} /></td>}
+                  {chain?.enabled && <td><ChainCell e={e} verdict={verify?.rows?.[e.id]} explorer={chain.explorer} wrd={wrdAddress} /></td>}
                 </tr>
               );
             })}

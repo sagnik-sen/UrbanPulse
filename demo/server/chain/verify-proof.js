@@ -35,8 +35,7 @@ if (String(proof.contract).toLowerCase() !== contractAddress.toLowerCase()) inva
   console.log(`alert ${d.code}: "${d.message}"`);
   console.log(`issued ${new Date(proof.entry.ts).toISOString()} for ${d.zone}`);
   console.log(`recomputed root  ${root}`);
-  console.log(`on-chain root    ${batch.root}  (batch ${proof.batchId}, anchored by "${agency}" ${batch.agency} at ${new Date(Number(batch.anchoredAt) * 1000).toISOString()})`);
-  if (!agency) invalid("the batch was anchored by an address that is not a registered agency");
+  console.log(`on-chain root    ${batch.root}  (batch ${proof.batchId}, anchored by "${agency || "an agency registered at the time, since revoked"}" ${batch.agency} at ${new Date(Number(batch.anchoredAt) * 1000).toISOString()})`);
   if (root !== batch.root) invalid("the alert does not match what was sealed on-chain");
   console.log("VALID: this exact alert was sealed on-chain by the agency above");
 })().catch((e) => {

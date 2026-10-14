@@ -19,6 +19,7 @@ import Settings from "./pages/Settings";
 import Citizen from "./pages/Citizen";
 import Planner from "./pages/Planner";
 import Audit from "./pages/Audit";
+import Reservoirs from "./pages/Reservoirs";
 import "./App.css";
 
 export default function App() {
@@ -40,6 +41,7 @@ export default function App() {
               <Route path="reports" element={<CitizenReports />} />
               <Route path="broadcasts" element={<Broadcasts />} />
               <Route path="shelters" element={<Shelters />} />
+              <Route path="reservoirs" element={<Reservoirs />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="accountability" element={<Accountability />} />
               <Route path="architecture" element={<Architecture />} />

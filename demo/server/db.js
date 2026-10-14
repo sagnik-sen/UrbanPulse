@@ -36,7 +36,8 @@ function openDb(file = path.join(DATA_DIR, "urbanpulse.db")) {
       root TEXT NOT NULL,
       count INTEGER NOT NULL,
       tx_hash TEXT NOT NULL,
-      anchored_at INTEGER NOT NULL
+      anchored_at INTEGER NOT NULL,
+      agency TEXT
     );
     CREATE TABLE IF NOT EXISTS audit_anchor (
       audit_id TEXT PRIMARY KEY,
@@ -50,6 +51,10 @@ function openDb(file = path.join(DATA_DIR, "urbanpulse.db")) {
       expires_at INTEGER NOT NULL
     );
   `);
+  // databases created before multi-agency anchoring lack the column (CREATE TABLE IF NOT EXISTS skips them)
+  if (!db.prepare("PRAGMA table_info(anchor_batches)").all().some((c) => c.name === "agency")) {
+    db.exec("ALTER TABLE anchor_batches ADD COLUMN agency TEXT");
+  }
 
   const RECORD_TABLES = new Set(["reports", "incidents", "broadcasts"]);
   const check = (table) => {
@@ -79,7 +84,7 @@ function openDb(file = path.join(DATA_DIR, "urbanpulse.db")) {
         .run(id, ts, username ?? null, role ?? null, action, JSON.stringify(details ?? {}));
     },
     listAudit({ action, limit = 500 } = {}) {
-      const sql = `SELECT a.*, x.batch_id, b.tx_hash FROM audit a
+      const sql = `SELECT a.*, x.batch_id, b.tx_hash, b.agency FROM audit a
         LEFT JOIN audit_anchor x ON x.audit_id = a.id LEFT JOIN anchor_batches b ON b.id = x.batch_id
         ${action ? "WHERE a.action = ?" : ""} ORDER BY a.ts DESC LIMIT ?`;
       const rows = action ? db.prepare(sql).all(action, limit) : db.prepare(sql).all(limit);
@@ -94,13 +99,22 @@ function openDb(file = path.join(DATA_DIR, "urbanpulse.db")) {
     },
 
     // blockchain anchoring (anchor.js): rows come back raw so hashes match the stored text exactly
-    unanchoredAudit(limit) {
-      return db.prepare("SELECT a.* FROM audit a LEFT JOIN audit_anchor x ON x.audit_id = a.id WHERE x.audit_id IS NULL ORDER BY a.ts, a.id LIMIT ?").all(limit);
+    // filter: { only: [actions] } or { except: [actions] }, so each agency anchors its own kinds of entry
+    unanchoredAudit(limit, filter = {}) {
+      const list = filter.only ?? filter.except;
+      const op = filter.only ? "IN" : "NOT IN";
+      const where = list ? `AND a.action ${op} (${list.map(() => "?").join(", ")})` : "";
+      return db.prepare(`SELECT a.* FROM audit a LEFT JOIN audit_anchor x ON x.audit_id = a.id WHERE x.audit_id IS NULL ${where} ORDER BY a.ts, a.id LIMIT ?`)
+        .all(...(list ?? []), limit);
     },
-    saveAnchorBatch({ id, root, count, txHash, anchoredAt }, rows) {
+    // batches written before agencies were recorded were all signed by GCC
+    backfillBatchAgency(address) {
+      db.prepare("UPDATE anchor_batches SET agency = ? WHERE agency IS NULL").run(address);
+    },
+    saveAnchorBatch({ id, root, count, txHash, anchoredAt, agency }, rows) {
       db.exec("BEGIN");
       try {
-        db.prepare("INSERT INTO anchor_batches (id, root, count, tx_hash, anchored_at) VALUES (?, ?, ?, ?, ?)").run(id, root, count, txHash, anchoredAt);
+        db.prepare("INSERT INTO anchor_batches (id, root, count, tx_hash, anchored_at, agency) VALUES (?, ?, ?, ?, ?, ?)").run(id, root, count, txHash, anchoredAt, agency ?? null);
         const link = db.prepare("INSERT INTO audit_anchor (audit_id, batch_id, pos, leaf) VALUES (?, ?, ?, ?)");
         rows.forEach((r, pos) => link.run(r.id, id, pos, r.leaf));
         db.exec("COMMIT");

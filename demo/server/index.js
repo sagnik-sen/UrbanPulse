@@ -16,6 +16,7 @@ const { createRainfallFeed } = require("./rainfall");
 const { createAnchor } = require("./anchor");
 const { buildTimelines, summarize } = require("./accountability");
 const { fusedZones } = require("./fusion-live");
+const { RESERVOIRS, releaseImpact } = require("./reservoirs");
 
 // optional server/.env holds the signing key for blockchain anchoring; the app runs without it
 try { process.loadEnvFile(path.join(__dirname, ".env")); } catch {}
@@ -61,11 +62,17 @@ function audit(user, action, details = {}) {
 // gas low; admins can anchor immediately from the Audit Log page.
 const ANCHOR_INTERVAL_MS = 5 * 60_000;
 const deployment = (() => { try { return require("./chain/deployment.json"); } catch { return null; } })();
+// reservoir releases are sealed by the Water Resources Department's own key; without that key GCC
+// keeps anchoring them too, so they are not left pending forever
+const WRD_ACTIONS = ["reservoir_release"];
 const chain = createAnchor({
   db,
   rpc: process.env.SHARDEUM_RPC || deployment?.rpc,
-  privateKey: process.env.SHARDEUM_PRIVATE_KEY,
   deployment,
+  signers: [
+    { key: "gcc", privateKey: process.env.SHARDEUM_PRIVATE_KEY, actions: process.env.SHARDEUM_WRD_PRIVATE_KEY ? { except: WRD_ACTIONS } : undefined },
+    { key: "wrd", privateKey: process.env.SHARDEUM_WRD_PRIVATE_KEY, actions: { only: WRD_ACTIONS } },
+  ],
   // deliberately not audited: an audit entry per anchor would itself need anchoring, forever
   onAnchored: (b) => io.to(ADMIN_ROOM).emit("audit-anchored", { batchId: b.id, txHash: b.txHash, ids: b.ids }),
 });
@@ -623,7 +630,45 @@ app.post("/api/evacuation-plan/execute", requireRole(...RESPONDERS), (req, res) 
   res.json({ ok: true, heldSeats: plan.metrics.assigned, unassigned, zones: request.zoneIds.length });
 });
 
-const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared", "sensor_status"]);
+// ---- Reservoir desk -------------------------------------------------------------
+// A release floods the downstream zones with a simulated rise and sends a warning to their residents.
+const RELEASE_CUSECS = { min: 100, max: 60000 };
+const RELEASE_HOURS = { min: 0.5, max: 72 };
+
+app.get("/api/reservoirs", requireRole(...STAFF), (req, res) => {
+  res.json({ reservoirs: RESERVOIRS, releases: db.listAudit({ action: "reservoir_release", limit: 20 }) });
+});
+
+app.post("/api/reservoirs/release", requireRole(...RESPONDERS), (req, res) => {
+  const { reservoirId, cusecs, durationHours, reason } = req.body || {};
+  const reservoir = RESERVOIRS.find((r) => r.id === reservoirId);
+  if (!reservoir) return res.status(400).json({ error: "Pick a known reservoir" });
+  if (!Number.isInteger(cusecs) || cusecs < RELEASE_CUSECS.min || cusecs > RELEASE_CUSECS.max) {
+    return res.status(400).json({ error: `Release must be a whole number of cusecs from ${RELEASE_CUSECS.min} to ${RELEASE_CUSECS.max}` });
+  }
+  if (typeof durationHours !== "number" || !(durationHours >= RELEASE_HOURS.min && durationHours <= RELEASE_HOURS.max)) {
+    return res.status(400).json({ error: `Duration must be ${RELEASE_HOURS.min} to ${RELEASE_HOURS.max} hours` });
+  }
+  const note = typeof reason === "string" ? reason.trim() : "";
+  if (note.length < 3 || note.length > 200) return res.status(400).json({ error: "Give a reason of 3 to 200 characters" });
+
+  const zoneNames = reservoir.downstream.map((id) => LOCATIONS.find((l) => l.id === id).name);
+  audit(req.user, "reservoir_release", { reservoirId: reservoir.id, reservoir: reservoir.name, cusecs, durationHours, reason: note, downstream: zoneNames });
+  const impact = releaseImpact(cusecs);
+  for (const zoneId of reservoir.downstream) {
+    injectStorm(LOCATIONS, zoneId, impact);
+    addBroadcast({
+      zoneId,
+      severity: "warning",
+      message: `RESERVOIR RELEASE: ${cusecs} cusecs from ${reservoir.name} for ${durationHours} h. ${reservoir.river} river will rise. Stay away from riverbanks and low bridges.`,
+      channels: ["sms", "push"],
+      source: "manual",
+    });
+  }
+  res.json({ ok: true, alerts: reservoir.downstream.length });
+});
+
+const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared", "sensor_status", "reservoir_release"]);
 
 app.get("/api/audit", requireRole("admin"), (req, res) => {
   const action = AUDIT_ACTIONS.has(req.query.action) ? req.query.action : undefined;
@@ -631,8 +676,16 @@ app.get("/api/audit", requireRole("admin"), (req, res) => {
   res.json(db.listAudit({ action, limit }));
 });
 
-app.get("/api/audit/chain", requireRole("admin"), (req, res) => {
-  res.json({ enabled: chain.enabled, canWrite: chain.canWrite, contract: chain.address ?? null, chainId: chain.chainId ?? null, network: deployment?.network ?? null, explorer: deployment?.explorer ?? null });
+app.get("/api/audit/chain", requireRole("admin"), async (req, res) => {
+  res.json({
+    enabled: chain.enabled,
+    canWrite: chain.canWrite,
+    contract: chain.address ?? null,
+    chainId: chain.chainId ?? null,
+    network: deployment?.network ?? null,
+    explorer: deployment?.explorer ?? null,
+    agencies: chain.enabled ? await chain.agencies() : [],
+  });
 });
 
 // Public: is this forwarded flood alert real? Answers from the anchored audit record, not the
@@ -664,8 +717,8 @@ const chainError = (res, err) => res.status(502).json({ error: `Blockchain unrea
 app.post("/api/audit/anchor", requireRole("admin"), async (req, res) => {
   if (!chain.canWrite) return res.status(503).json({ error: "Anchoring is not configured on this server" });
   try {
-    const batch = await chain.anchorNow();
-    res.json(batch ? { anchored: batch.count, batchId: batch.id, txHash: batch.txHash } : { anchored: 0 });
+    const batches = await chain.anchorNow();
+    res.json({ anchored: batches.reduce((n, b) => n + b.count, 0), batches: batches.map((b) => ({ batchId: b.id, txHash: b.txHash, agency: b.agency })) });
   } catch (err) {
     chainError(res, err);
   }

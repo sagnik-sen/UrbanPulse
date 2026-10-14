@@ -42,10 +42,10 @@ function anchorAll(db, size, chain = []) {
     if (rows.length === 0) return chain;
     const id = chain.length;
     chain.push({ root: merkleRoot(rows.map((r) => r.leaf)), count: rows.length, agency: AGENCY });
-    db.saveAnchorBatch({ id, root: chain[id].root, count: rows.length, txHash: `0xtx${id}`, anchoredAt: 0 }, rows);
+    db.saveAnchorBatch({ id, root: chain[id].root, count: rows.length, txHash: `0xtx${id}`, anchoredAt: 0, agency: AGENCY }, rows);
   }
 }
-const verify = (db, chain) => verifyLog(db, { total: chain.length, getBatch: async (id) => chain[id], agency: AGENCY });
+const verify = (db, chain) => verifyLog(db, { total: chain.length, getBatch: async (id) => chain[id] });
 
 const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
 const batchOf = (db, id) => db.raw.prepare("SELECT batch_id FROM audit_anchor WHERE audit_id = ?").get(id)?.batch_id;

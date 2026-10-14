@@ -63,27 +63,35 @@ function checkBatch(entries, onChain) {
   return { sealed, intact, rows, deleted };
 }
 
-// Whole-log check. chain: { total, getBatch(id) -> { root, count, agency }, agency } where agency
-// is the address whose batches count as ours (other agencies share the contract).
-async function verifyLog(db, { total, getBatch, agency }) {
+// A chain batch counts only if the agency we stored for it is the one that wrote it. The contract
+// accepts batches only from registered agencies, so revoking an agency later leaves its history valid.
+function trustedBatch(onChain, storedAgency) {
+  if (!onChain || !storedAgency || onChain.agency.toLowerCase() !== storedAgency.toLowerCase()) return null;
+  return onChain;
+}
+
+// Whole-log check. chain: { total, getBatch(id) -> { root, count, agency } }.
+// agencies: addresses of our configured signers, so a batch of theirs that is missing locally is reported.
+async function verifyLog(db, { total, getBatch, agencies = [] }) {
   const rows = {};
   const deleted = [];
   const batches = [];
   const local = db.anchorBatches();
   for (const b of local) {
     const onChain = b.id < total ? await getBatch(b.id) : null;
-    const result = checkBatch(db.batchEntries(b.id), onChain?.agency === agency ? onChain : null);
+    const result = checkBatch(db.batchEntries(b.id), trustedBatch(onChain, b.agency));
     Object.assign(rows, result.rows);
     deleted.push(...result.deleted);
     batches.push({ id: b.id, count: b.count, txHash: b.tx_hash, intact: result.intact });
   }
-  // batches this agency anchored that have vanished from the local database entirely
+  // batches from our agencies that have vanished from the local database entirely
+  const ours = new Set([...local.map((b) => b.agency), ...agencies].filter(Boolean).map((a) => a.toLowerCase()));
   const known = new Set(local.map((b) => b.id));
   const missing = [];
   for (let id = 0; id < total; id++) {
     if (known.has(id)) continue;
     const c = await getBatch(id);
-    if (c.agency === agency) missing.push({ id, count: c.count });
+    if (ours.has(c.agency.toLowerCase())) missing.push({ id, count: c.count });
   }
   const tampered = Object.values(rows).filter((s) => s === "tampered").length;
   return {
@@ -99,34 +107,64 @@ async function verifyLog(db, { total, getBatch, agency }) {
 }
 
 // Without an RPC or contract address the log still works; entries just stay unanchored.
-function createAnchor({ db, rpc, privateKey, deployment, onAnchored }) {
+// signers: [{ key, privateKey, actions?: { only } | { except } }]; each signs the entries its actions select.
+function createAnchor({ db, rpc, deployment, signers = [], onAnchored }) {
   if (!rpc || !deployment?.address) return { enabled: false, canWrite: false };
 
   // static network: no chain-id probing, so an unreachable RPC fails calls instead of retrying forever in the background
   const provider = new JsonRpcProvider(rpc, deployment.chainId, { staticNetwork: true });
-  const wallet = privateKey ? new Wallet(privateKey.trim(), provider) : null;
-  const contract = new Contract(deployment.address, abi, wallet ?? provider);
+  const writers = signers.filter((s) => s.privateKey).map((s) => {
+    const wallet = new Wallet(s.privateKey.trim(), provider);
+    return { key: s.key, actions: s.actions, wallet, writer: new Contract(deployment.address, abi, wallet) };
+  });
+  const contract = new Contract(deployment.address, abi, provider);
+
+  // batches from before agencies were recorded were all signed by GCC: its key's address, or the contract admin without keys
+  const gcc = writers.find((w) => w.key === "gcc");
+  if (gcc) db.backfillBatchAgency(gcc.wallet.address);
+  let legacyDone = !!gcc;
+  const ready = async () => {
+    if (legacyDone) return;
+    db.backfillBatchAgency(await contract.admin());
+    legacyDone = true;
+  };
 
   // one send at a time, or the timer and the "Anchor now" button would race on the nonce
   let inFlight = null;
-  async function sendBatch() {
-    const rows = db.unanchoredAudit(MAX_BATCH);
+  async function sendBatch({ wallet, actions, writer }) {
+    const rows = db.unanchoredAudit(MAX_BATCH, actions);
     if (rows.length === 0) return null;
     for (const r of rows) r.leaf = leafHash(r);
     const root = merkleRoot(rows.map((r) => r.leaf));
-    const tx = await contract.anchor(root, rows.length);
+    const tx = await writer.anchor(root, rows.length);
     const receipt = await tx.wait(1, 120_000);
-    const event = receipt.logs.map((l) => { try { return contract.interface.parseLog(l); } catch { return null; } }).find((e) => e?.name === "Anchored");
+    const event = receipt.logs.map((l) => { try { return writer.interface.parseLog(l); } catch { return null; } }).find((e) => e?.name === "Anchored");
     if (!event) throw new Error(`no Anchored event in ${tx.hash}`);
     // a crash between the receipt and this write leaves an on-chain batch with no local record (verify reports it as missing)
-    const batch = { id: Number(event.args.batchId), root, count: rows.length, txHash: tx.hash, anchoredAt: Date.now() };
+    const batch = { id: Number(event.args.batchId), root, count: rows.length, txHash: tx.hash, anchoredAt: Date.now(), agency: wallet.address };
     db.saveAnchorBatch(batch, rows);
     onAnchored?.({ ...batch, ids: rows.map((r) => r.id) });
     return batch;
   }
+  // a failing signer does not stop the others; only failure of every signer is an error
+  async function sendAll() {
+    const batches = [];
+    const errors = [];
+    for (const w of writers) {
+      try {
+        const batch = await sendBatch(w);
+        if (batch) batches.push(batch);
+      } catch (err) {
+        errors.push(err);
+      }
+    }
+    if (errors.length === writers.length) throw errors[0];
+    for (const err of errors) console.error("anchoring failed for one agency:", err.shortMessage || err.message);
+    return batches;
+  }
   const anchorNow = () => {
-    if (!wallet) return Promise.reject(new Error("No signing key configured"));
-    inFlight ??= sendBatch().finally(() => { inFlight = null; });
+    if (writers.length === 0) return Promise.reject(new Error("No signing key configured"));
+    inFlight ??= sendAll().finally(() => { inFlight = null; });
     return inFlight;
   };
 
@@ -140,17 +178,32 @@ function createAnchor({ db, rpc, privateKey, deployment, onAnchored }) {
     return chainCache.get(id);
   }
 
-  let agencyAddress = wallet?.address ?? null;
-  const ourAgency = async () => (agencyAddress ??= await contract.admin());
+  // agency names are read on every verify and rarely change, so successful lookups are cached
+  const names = new Map();
+  async function agencyName(address) {
+    const key = address.toLowerCase();
+    if (!names.has(key)) {
+      const name = await contract.agencyName(address);
+      if (name) names.set(key, name);
+      return name;
+    }
+    return names.get(key);
+  }
+  const agencies = () => Promise.all(writers.map(async (w) => ({
+    key: w.key,
+    address: w.wallet.address,
+    name: await agencyName(w.wallet.address).then((n) => n || null, () => null),
+  })));
 
   // one entry with its inclusion proof, for the public alert check; reads only that entry's batch
   async function verifyEntry(entryId, batchId) {
+    await ready();
     const entries = db.batchEntries(batchId);
     const index = entries.findIndex((e) => e.audit_id === entryId);
     const total = Number(await contract.batchCount());
     const onChain = batchId < total ? await chainBatch(batchId) : null;
-    const trusted = onChain?.agency === (await ourAgency()) ? onChain : null;
-    const result = checkBatch(entries, trusted);
+    const stored = db.anchorBatches().find((b) => b.id === batchId);
+    const result = checkBatch(entries, trustedBatch(onChain, stored?.agency));
     const e = entries[index];
     return {
       status: result.rows[entryId] ?? "tampered",
@@ -168,10 +221,11 @@ function createAnchor({ db, rpc, privateKey, deployment, onAnchored }) {
   }
 
   async function verify() {
-    return verifyLog(db, { total: Number(await contract.batchCount()), getBatch: chainBatch, agency: await ourAgency() });
+    await ready();
+    return verifyLog(db, { total: Number(await contract.batchCount()), getBatch: chainBatch, agencies: writers.map((w) => w.wallet.address) });
   }
 
-  return { enabled: true, canWrite: !!wallet, address: deployment.address, chainId: deployment.chainId, anchorNow, verify, verifyEntry };
+  return { enabled: true, canWrite: writers.length > 0, address: deployment.address, chainId: deployment.chainId, anchorNow, verify, verifyEntry, agencies };
 }
 
 module.exports = { leafHash, merkleRoot, merkleProof, rootFromProof, checkBatch, verifyLog, createAnchor };
