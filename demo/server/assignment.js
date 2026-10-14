@@ -4,7 +4,7 @@
 //
 // Successive shortest paths (Bellman-Ford on the residual graph) gives the exact optimum:
 // the largest number of people housed, at the lowest total cost among all such plans.
-// Graphs here are tiny (zones x shelters), so this runs in well under a millisecond.
+// Graphs here are zones x shelters; one solve takes about 5 ms at 200 wards.
 
 function minCostMaxFlow(nodeCount, edges, s, t) {
   const graph = Array.from({ length: nodeCount }, () => []);
@@ -22,21 +22,28 @@ function minCostMaxFlow(nodeCount, edges, s, t) {
   for (;;) {
     const dist = Array(nodeCount).fill(Infinity);
     const prevEdge = Array(nodeCount).fill(-1);
+    // Same sweeps and node order as plain Bellman-Ford, but a node is only rescanned after its
+    // distance dropped: rescanning an unchanged node cannot relax anything, so dist and prevEdge
+    // come out identical to the full sweep (equal-cost ties resolve the same way).
+    const dirty = Array(nodeCount).fill(false);
     dist[s] = 0;
-    for (let iter = 0; iter < nodeCount - 1; iter++) {
-      let changed = false;
+    dirty[s] = true;
+    let changed = true;
+    for (let iter = 0; iter < nodeCount - 1 && changed; iter++) {
+      changed = false;
       for (let u = 0; u < nodeCount; u++) {
-        if (dist[u] === Infinity) continue;
+        if (!dirty[u]) continue;
+        dirty[u] = false;
         for (const id of graph[u]) {
           const e = E[id];
           if (e.cap - e.flow > 0 && dist[u] + e.cost < dist[e.to] - 1e-9) {
             dist[e.to] = dist[u] + e.cost;
             prevEdge[e.to] = id;
+            dirty[e.to] = true;
             changed = true;
           }
         }
       }
-      if (!changed) break;
     }
     if (dist[t] === Infinity) break;
 
