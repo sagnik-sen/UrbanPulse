@@ -234,6 +234,30 @@ sent over a real network and the sender's number is not stored. Commands are cas
 
 Area names match an exact name, a prefix, or any part of a zone name, so `SHELTER mar` finds Pallikaranai Marshland.
 
+## Abuse protection
+
+Public routes (no sign-in) write data or cost a blockchain read, so each one has a fixed-window limit per client IP (`server/ratelimit.js`). A request over the limit gets `429` with a `Retry-After` header.
+
+| Route | Limit |
+|---|---|
+| `POST /api/auth/login` | 20 per 10 min (on top of the per-account lockout) |
+| `POST /api/citizen-report` | 10 per 10 min |
+| `POST /api/rescue` | 5 per 10 min |
+| `POST /api/rescue/:id/cancel` | 20 per 10 min |
+| `GET /api/rescue/:id` | 120 per min |
+| `POST /api/vulnerable`, `DELETE /api/vulnerable/:id` | 10 per hour, shared |
+| `POST /api/sms/inbound` | 30 per min |
+| `GET /api/alerts/verify/:code` | 60 per min |
+| `GET /api/evacuation-route` | 30 per min |
+
+Caps that stop slower spam, checked in the handlers:
+
+- **Vulnerable registrations:** 409 once an area has 2,000 registrations; the stored list holds at most 20,000 entries in total.
+- **Rescue requests:** 409 while 500 requests are open (status `open`, not yet assigned).
+- **Citizen reports:** 409 when the same text (case-insensitive, trimmed) was filed in the same area in the last 10 minutes.
+
+Limits are in memory: they reset on restart and are not shared between server processes. In development the Vite dev proxy makes every request come from one IP, so the limits apply to the proxy as a whole. A deployment behind a gateway should set `app.set("trust proxy", ...)` so that `req.ip` is the client.
+
 ## Talking points
 
 - Swap `stepZones()` in `server/simulator.js` for real sensor ingestion and `server/forecast.js` for the trained LSTM once hardware/data exist. The rest of the app only reads the forecast path it returns

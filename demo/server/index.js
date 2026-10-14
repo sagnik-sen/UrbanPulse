@@ -20,6 +20,7 @@ const { buildTimelines, summarize } = require("./accountability");
 const { fusedZones } = require("./fusion-live");
 const { RESERVOIRS, releaseImpact } = require("./reservoirs");
 const { matchOptimal, matchGreedy, validateRequest, validateBoat, validateBoatPatch, publicRequest, requestStatus, demoBoats, MATCH_METHODS } = require("./rescue");
+const { rateLimit } = require("./ratelimit");
 
 // optional server/.env holds the signing key for blockchain anchoring; the app runs without it
 try { process.loadEnvFile(path.join(__dirname, ".env")); } catch {}
@@ -44,6 +45,19 @@ app.use(attachUser(auth));
 
 const STAFF = ["admin", "officer", "viewer"];
 const RESPONDERS = ["admin", "officer"];
+
+// abuse limits for public routes, per client IP (see ratelimit.js for the dev-proxy caveat)
+const loginLimit = rateLimit({ windowMs: 10 * 60_000, max: 20, name: "login" });
+const citizenReportLimit = rateLimit({ windowMs: 10 * 60_000, max: 10, name: "citizen-report" });
+const rescueRequestLimit = rateLimit({ windowMs: 10 * 60_000, max: 5, name: "rescue-request" });
+const rescueCancelLimit = rateLimit({ windowMs: 10 * 60_000, max: 20, name: "rescue-cancel" });
+const rescueStatusLimit = rateLimit({ windowMs: 60_000, max: 120, name: "rescue-status" });
+// one limiter shared by registering and cancelling, so a flood of either counts against the same budget
+const vulnerableLimit = rateLimit({ windowMs: 60 * 60_000, max: 10, name: "vulnerable" });
+const smsLimit = rateLimit({ windowMs: 60_000, max: 30, name: "sms" });
+const alertVerifyLimit = rateLimit({ windowMs: 60_000, max: 60, name: "alert-verify" });
+const evacuationRouteLimit = rateLimit({ windowMs: 60_000, max: 30, name: "evacuation-route" });
+
 const STAFF_ROOM = "staff";
 
 // staff sockets join a room; incident and report events (reporter names, dispatch) only go there
@@ -279,7 +293,7 @@ async function refreshRainfall() {
 refreshRainfall();
 setInterval(refreshRainfall, RAIN_REFRESH_MS);
 
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", loginLimit, (req, res) => {
   const { username, password } = req.body || {};
   const result = auth.login(username, password);
   if (result.error) {
@@ -358,12 +372,18 @@ const SEVERITIES = new Set(["low", "medium", "high"]);
 // random per-browser id from the citizen app; it keys reporter trust, so it is never shown publicly
 const DEVICE_ID = /^[0-9a-f-]{36}$/i;
 
-app.post("/api/citizen-report", (req, res) => {
+app.post("/api/citizen-report", citizenReportLimit, (req, res) => {
   const { lat, lng, category, severity, description, reporter, deviceId } = req.body;
   if (typeof lat !== "number" || typeof lng !== "number" || !description || !String(description).trim()) {
     return res.status(400).json({ error: "lat, lng and description are required" });
   }
   const zone = nearestZone(lat, lng);
+  // the same text pasted again in one area within 10 minutes is a repeat, not a new report
+  const text = String(description).slice(0, 500).trim().toLowerCase();
+  const now = Date.now();
+  if (citizenReports.some((r) => r.zoneId === zone.id && now - r.ts < 10 * 60_000 && r.description.trim().toLowerCase() === text)) {
+    return res.status(409).json({ error: "This report was already filed" });
+  }
   const report = {
     id: randomUUID(),
     lat,
@@ -375,7 +395,7 @@ app.post("/api/citizen-report", (req, res) => {
     deviceId: typeof deviceId === "string" && DEVICE_ID.test(deviceId) ? deviceId : null,
     zoneId: zone.id,
     zoneName: zone.name,
-    ts: Date.now(),
+    ts: now,
     status: "open",
   };
   citizenReports.unshift(report);
@@ -420,9 +440,10 @@ app.patch("/api/incidents/:id", requireRole(...RESPONDERS), (req, res) => {
 // ---- Volunteer boat rescue -----------------------------------------------------
 // Citizens post requests (public, using the id they keep); volunteer boats register; the control room
 // matches them. Phone numbers are staff-only: public responses drop them and events go to staff only.
-app.post("/api/rescue", (req, res) => {
+app.post("/api/rescue", rescueRequestLimit, (req, res) => {
   const parsed = validateRequest(req.body);
   if (parsed.error) return res.status(400).json({ error: parsed.error });
+  if (rescues.filter((x) => x.status === "open").length >= 500) return res.status(409).json({ error: "Too many open rescue requests right now. Try again shortly or call emergency services." });
   const zone = nearestZone(parsed.value.lat, parsed.value.lng);
   const r = { id: randomUUID(), ...parsed.value, zoneId: zone.id, zoneName: zone.name, status: "open", boatId: null, ts: Date.now(), assignedAt: null, rescuedAt: null };
   rescues.unshift(r);
@@ -433,7 +454,7 @@ app.post("/api/rescue", (req, res) => {
   res.json(publicRequest(r));
 });
 
-app.post("/api/rescue/:id/cancel", (req, res) => {
+app.post("/api/rescue/:id/cancel", rescueCancelLimit, (req, res) => {
   const r = rescues.find((x) => x.id === req.params.id);
   if (!r) return res.status(404).json({ error: "not found" });
   if (r.status !== "open" && r.status !== "assigned") return res.status(409).json({ error: "This request is already closed" });
@@ -451,7 +472,7 @@ app.post("/api/rescue/:id/cancel", (req, res) => {
   res.json(requestStatus(r, boats));
 });
 
-app.get("/api/rescue/:id", (req, res) => {
+app.get("/api/rescue/:id", rescueStatusLimit, (req, res) => {
   const r = rescues.find((x) => x.id === req.params.id);
   if (!r) return res.status(404).json({ error: "not found" });
   res.json(requestStatus(r, boats));
@@ -591,7 +612,7 @@ function reservedByShelter() {
 const routeCache = new Map();
 const ROUTE_CACHE_MS = 30000;
 
-app.get("/api/evacuation-route", async (req, res) => {
+app.get("/api/evacuation-route", evacuationRouteLimit, async (req, res) => {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
   const b = CHENNAI_BOUNDS;
@@ -742,18 +763,23 @@ function buildEvacuationPlans({ zoneIds, peoplePerZone }) {
 // a demo, not for a city-scale registry.
 const getVulnerable = () => db.getSetting("vulnerableRegistrations", []);
 
-app.post("/api/vulnerable", (req, res) => {
+app.post("/api/vulnerable", vulnerableLimit, (req, res) => {
   const checked = validateVulnerable(req.body);
   if (checked.error) return res.status(400).json({ error: checked.error });
   const { zoneId, category, count } = checked.value;
   if (!LOCATIONS.some((l) => l.id === zoneId)) return res.status(400).json({ error: "Choose an area" });
+  // per-area cap stops one area being flooded with fake registrations; the total cap keeps the settings row bounded
+  const all = getVulnerable();
+  if (all.length >= 20_000 || all.filter((r) => r.zoneId === zoneId).length >= 2_000) {
+    return res.status(409).json({ error: "Registration limit reached for this area" });
+  }
   const id = randomUUID();
-  db.setSetting("vulnerableRegistrations", [...getVulnerable(), { id, zoneId, category, count, ts: Date.now() }]);
+  db.setSetting("vulnerableRegistrations", [...all, { id, zoneId, category, count, ts: Date.now() }]);
   audit(null, "vulnerable_registered", { zoneId, category, count });
   res.json({ id });
 });
 
-app.delete("/api/vulnerable/:id", (req, res) => {
+app.delete("/api/vulnerable/:id", vulnerableLimit, (req, res) => {
   const all = getVulnerable();
   const gone = all.find((r) => r.id === req.params.id);
   if (gone) {
@@ -876,7 +902,7 @@ app.get("/api/audit/chain", requireRole("admin"), async (req, res) => {
 // Public: is this forwarded flood alert real? Answers from the anchored audit record, not the
 // broadcasts table, so it reflects exactly what was sealed (and survives clearing demo data).
 const ALERT_CODE = /^UP-[0-9A-F]{8}$/;
-app.get("/api/alerts/verify/:code", async (req, res) => {
+app.get("/api/alerts/verify/:code", alertVerifyLimit, async (req, res) => {
   const code = String(req.params.code).trim().toUpperCase();
   if (!ALERT_CODE.test(code)) return res.status(400).json({ error: "Alert codes look like UP-1A2B3C4D" });
   const row = db.findAlert(code);
@@ -900,7 +926,7 @@ app.get("/api/alerts/verify/:code", async (req, res) => {
 const { handleSms } = require("./sms");
 // Simulated SMS gateway: a telecom gateway would post { from, text } here and send back { reply }.
 // The sender number is only validated; it is never stored or logged.
-app.post("/api/sms/inbound", async (req, res) => {
+app.post("/api/sms/inbound", smsLimit, async (req, res) => {
   const { from, text } = req.body || {};
   if (typeof text !== "string" || text.length > 500) return res.status(400).json({ error: "text must be a string of up to 500 characters" });
   if (from !== undefined && !(typeof from === "string" && from.length <= 20 && /^[0-9+]*$/.test(from))) return res.status(400).json({ error: "from must be a phone number" });
