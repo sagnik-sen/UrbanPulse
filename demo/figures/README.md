@@ -1,0 +1,51 @@
+# UrbanPulse paper figures
+
+Each figure is drawn from the experiment outputs in `demo/server/experiments/results` (and rainfall
+data in `demo/server/experiments/data`). Nothing is typed in by hand. The script also cross-checks its
+numbers against the committed markdown tables and stops if they differ.
+
+## Setup and run
+
+From the repository root (Python 3.9+):
+
+```
+python3 -m venv demo/figures/.venv
+demo/figures/.venv/bin/pip install -r demo/figures/requirements.txt
+```
+
+Regenerate the experiment CSVs first, from `demo/server`:
+
+```
+node experiments/run.js --seeds 200
+node experiments/fusion.js --seeds 200
+node experiments/tamper.js --seeds 200
+node experiments/replay.js
+node experiments/scale.js
+```
+
+Then build the figures from the repository root:
+
+```
+demo/figures/.venv/bin/python demo/figures/make_figures.py
+```
+
+This writes 12 files to `demo/figures/out/`: each figure as PDF and as 300-dpi PNG.
+The `.venv` directory is git-ignored.
+
+## Figures
+
+| File | What it shows | Source |
+|---|---|---|
+| `fig_evacuation` | Evacuation policies (double column): % of evacuees without a bed, % sent to a flooded shelter, mean travel time, mean ± 95% CI over all scenario runs. The proposed policy is in bold. | `run.js` → `results/results.csv` |
+| `fig_fusion` | Danger-episode recall vs sensor dropout at false-report rate 0, for sensor only, citizen reports only and fused, mean ± 95% CI over seeds. | `fusion.js` → `results/fusion.csv` |
+| `fig_replay_michaung` | Velachery, 28 Nov–7 Dec 2023 (double column): hourly rainfall and 24 h rolling total against the IMD 64.5 / 115.6 mm thresholds (top); Model A level against 40 / 70 with first-danger times for Model A and Model B, and 4 Dec shaded (bottom). | `replay.js` rule re-implemented in Python, `data/rain-michaung-2023.json`, `data/flood-timeline.json`; checked against `results/replay.md` |
+| `fig_tamper` | Audit-log attacks: share of trials pinpointed to the entry, flagged at batch level, or not detected (200 trials per attack). The control row is omitted; its false-alarm count is in `tamper.md`. | `tamper.js` → `results/tamper.csv` |
+| `fig_scale` | Time per operation (tick, fusion, plan, anchor + verify) vs zones N = 6, 50, 100, 200, log-log, with the 2,000 ms tick budget. | `scale.js` → `results/scale.csv` |
+| `fig_chain_latency` | (a) Send-to-receipt latency per anchor with median and p90; (b) gas used per anchor by batch size (1, 10, 100, 500). | `results/chain-bench.json` (committed testnet measurements) |
+
+## Notes
+
+- The replay figure's 24 h rolling total starts at 28 Nov 23:00, the first hour with a full 24 h of data.
+- Hourly rainfall bars are placed at their IST hour labels. Whether a label marks the start or the end of the hour is not checked (see `replay.md`).
+- Error bars are 1.96 × sample SD / √n, the same formula the experiment scripts use.
+- Figures use the Okabe–Ito palette, and every series also differs by marker, hatch or line style.
