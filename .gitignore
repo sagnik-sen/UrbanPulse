@@ -7,3 +7,4 @@ dist/
 demo/server/data/
 demo/server/experiments/results/*.csv
 .env
+.env.local

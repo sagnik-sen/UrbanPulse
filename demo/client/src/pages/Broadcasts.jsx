@@ -1,7 +1,9 @@
 import { useState } from "react";
+import QRCode from "qrcode";
 import { useFloodData } from "../FloodDataContext";
 import { useAuth } from "../AuthContext";
 import { timeAgo, formatCount } from "../constants";
+import { VERIFIER_URL, encode } from "../verifier";
 
 const TEMPLATES = [
   { label: "Evacuation order", severity: "danger", text: "EVACUATE NOW: Rising flood waters in your area. Proceed to the nearest relief shelter. Do not attempt to cross flooded roads." },
@@ -22,6 +24,29 @@ export default function Broadcasts() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
+  const [posterBusy, setPosterBusy] = useState(null);
+  const [posterNote, setPosterNote] = useState(null);
+  const [poster, setPoster] = useState(null);
+
+  const makePoster = async (code) => {
+    setPosterBusy(code);
+    setPosterNote(null);
+    try {
+      const res = await fetch(`/api/alerts/verify/${code}`);
+      const data = await res.json();
+      if (data.status !== "verified") {
+        setPosterNote({ code, text: data.status === "pending" ? "Seal it first: anchor the audit log, then try again." : `Cannot make a poster QR yet (status: ${data.status ?? "not found"}).` });
+        return;
+      }
+      const url = VERIFIER_URL + "#" + encode(data.proof, data.txHash);
+      const dataUrl = await QRCode.toDataURL(url, { errorCorrectionLevel: "L", margin: 2, width: 512 });
+      setPoster({ code, url, dataUrl });
+    } catch (err) {
+      setPosterNote({ code, text: err.message });
+    } finally {
+      setPosterBusy(null);
+    }
+  };
 
   const recipients = zoneId === "all"
     ? locations.reduce((s, l) => s + l.population, 0)
@@ -121,11 +146,35 @@ export default function Broadcasts() {
                 </div>
                 <div className="feed-text">{b.message}</div>
                 <div className="feed-time">{timeAgo(b.ts)} · ~{formatCount(b.recipients)} recipients{b.code && <> · code <span className="mono">{b.code}</span></>}</div>
+                {b.code && (
+                  <button type="button" className="btn ghost" style={{ marginTop: 8, padding: "3px 10px", fontSize: 12 }} disabled={posterBusy === b.code} onClick={() => makePoster(b.code)}>
+                    {posterBusy === b.code ? "Making QR…" : "Poster QR"}
+                  </button>
+                )}
+                {posterNote?.code === b.code && <div className="form-error" style={{ marginTop: 8, marginBottom: 0 }}>{posterNote.text}</div>}
               </div>
             </div>
           ))}
         </div>
       </div>
+
+      {poster && (
+        <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setPoster(null)}>
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="poster-title">
+            <div className="modal-head">
+              <h2 id="poster-title">Poster QR for <span className="mono">{poster.code}</span></h2>
+              <button type="button" className="icon-btn" onClick={() => setPoster(null)} aria-label="Close">×</button>
+            </div>
+            <div className="modal-body">
+              {!VERIFIER_URL && <div className="form-error">The verifier page is not published yet, so this QR does not open it. Set VITE_VERIFIER_URL in client/.env.local first.</div>}
+              <img src={poster.dataUrl} alt={`QR code for alert ${poster.code}`} width={256} height={256} style={{ alignSelf: "center", background: "#fff", borderRadius: 8 }} />
+              <span className="muted small">URL length: {poster.url.length} characters</span>
+              <a className="btn ghost" href={poster.dataUrl} download={`urbanpulse-alert-${poster.code}.png`} style={{ alignSelf: "center" }}>Download PNG</a>
+              <div className="mono" style={{ fontSize: 12, wordBreak: "break-all", userSelect: "text", background: "#111", border: "1px solid #2c2c2a", borderRadius: 8, padding: 8 }}>{poster.url}</div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -162,8 +162,8 @@ to `verify.html` (in `demo/verifier/`) with the alert's entry, its Merkle siblin
 transaction hash in the URL fragment. Scanning it opens that page, which recomputes the fingerprint
 (Merkle root) on the viewer's phone, with no UrbanPulse server involved, and links to the Shardeum
 explorer transaction where the same fingerprint is stored. The page's contract and explorer
-address are fixed in the file. Set `VERIFIER_URL` in `client/src/verifier.js` to the public URL of the
-published `verify.html`; until then the QR is generated but flagged as not yet pointing anywhere.
+address are fixed in the file. Host `verify.html` on any static site and put its public URL in `client/.env.local` as
+`VITE_VERIFIER_URL=...` (git-ignored); until then the QR is generated but flagged as not yet pointing anywhere.
 
 ## Talking points
 

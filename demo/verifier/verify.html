@@ -1,0 +1,247 @@
+<title>Alert Seal Check</title>
+<style>
+  :root {
+    --bg: #f5f6f4;
+    --card: #ffffff;
+    --text: #1c211e;
+    --muted: #5b655f;
+    --line: #d8ded9;
+    --code: #eef2ef;
+    --accent: #1d5fa8;
+    --on-accent: #ffffff;
+    --ok: #1e7a3c;
+    --ok-bg: #e6f3ea;
+    --err: #a32020;
+    --err-bg: #fbeaea;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121513;
+      --card: #1b1f1c;
+      --text: #e8ece9;
+      --muted: #9aa59e;
+      --line: #2e3530;
+      --code: #232a25;
+      --accent: #6aa8ef;
+      --on-accent: #0d1a2a;
+      --ok: #6fd08c;
+      --ok-bg: #1d3327;
+      --err: #ff9b9b;
+      --err-bg: #3a1c1c;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121513;
+    --card: #1b1f1c;
+    --text: #e8ece9;
+    --muted: #9aa59e;
+    --line: #2e3530;
+    --code: #232a25;
+    --accent: #6aa8ef;
+    --on-accent: #0d1a2a;
+    --ok: #6fd08c;
+    --ok-bg: #1d3327;
+    --err: #ff9b9b;
+    --err-bg: #3a1c1c;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  h1, h2 { margin: 0; line-height: 1.3; }
+  h1 { font-size: 20px; word-break: break-word; }
+  h2 { font-size: 16px; }
+  p { margin: 0; }
+  ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 8px; }
+  .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .brand { font-weight: 700; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .status { background: var(--ok-bg); color: var(--ok); border-radius: 12px; padding: 12px 16px; font-weight: 700; }
+  .error { background: var(--err-bg); color: var(--err); border-radius: 12px; padding: 12px 16px; }
+  .badge { align-self: flex-start; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 13px; color: var(--muted); }
+  .facts { display: grid; grid-template-columns: 96px 1fr; gap: 6px 12px; margin: 0; }
+  .facts dt { color: var(--muted); }
+  .facts dd { margin: 0; word-break: break-word; }
+  .hash { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; background: var(--code); border-radius: 8px; padding: 10px; word-break: break-all; user-select: all; }
+  .btn { align-self: flex-start; display: inline-block; font: inherit; font-weight: 600; background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 16px; text-decoration: none; cursor: pointer; }
+  .btn.quiet { background: transparent; color: var(--accent); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  a { color: var(--accent); }
+</style>
+
+<main>
+  <div class="top">
+    <span class="brand">UrbanPulse</span>
+    <span class="muted small">Alert seal check</span>
+  </div>
+
+  <div id="error" class="error" role="alert" hidden></div>
+  <div id="status" class="status" hidden>Fingerprint computed</div>
+
+  <section id="intro" class="card">
+    <h1>Check a flood alert</h1>
+    <p>Scan the QR code on an UrbanPulse flood poster to open this page. Your phone recomputes the alert's fingerprint from the alert text in the link, then points you to the public Shardeum blockchain record where the same fingerprint was sealed. No UrbanPulse server is contacted.</p>
+  </section>
+
+  <section id="example" class="card">
+    <span class="badge">Example (not a real alert)</span>
+    <h2>Sample alert</h2>
+    <p class="muted">Sample text for layout only. A real page shows the alert message, zone, severity and time.</p>
+    <p>Fingerprint: <code class="hash">0x&lt;64 hex characters&gt;</code></p>
+  </section>
+
+  <section id="result" hidden>
+    <article class="card">
+      <h1 id="message"></h1>
+      <dl class="facts">
+        <dt>Zone</dt><dd id="zone"></dd>
+        <dt>Severity</dt><dd id="severity"></dd>
+        <dt>Code</dt><dd id="code"></dd>
+        <dt>Issued</dt><dd id="issued"></dd>
+      </dl>
+    </article>
+
+    <article class="card">
+      <h2>Fingerprint</h2>
+      <p class="muted small">Recomputed on this phone from the alert text.</p>
+      <code id="root" class="hash"></code>
+      <button id="copy" type="button" class="btn quiet">Copy fingerprint</button>
+    </article>
+
+    <article class="card">
+      <h2>Check the blockchain record</h2>
+      <ol>
+        <li>This fingerprint was computed on your phone from the alert text.</li>
+        <li>Open the sealing transaction on the Shardeum explorer.</li>
+        <li>Check that "Interacted with contract" is the UrbanPulse contract <code id="contract" class="hash"></code></li>
+        <li>Tap "View details". Under "Decoded input data", the call is <code>anchor</code> and <code>arg0</code> must equal the fingerprint above.</li>
+      </ol>
+      <p class="muted small">Network: Shardeum Mezame testnet, chain ID <span id="chain"></span></p>
+      <div id="txArea"></div>
+      <p class="muted small">The "Raw input" field should begin with:</p>
+      <code id="prefix" class="hash"></code>
+    </article>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+<script>
+  // Fixed from server/chain/deployment.json; never taken from the link
+  const CONTRACT = "0x7C4Bc679f261158Acb2De9F3c42Ec9A219F3b9bf";
+  const CHAIN_ID = 8119;
+  const EXPLORER = "https://explorer-mezame.shardeum.org";
+
+  // Copy of demo/verifier/payload.js (factory body); keep identical
+  const UPPayload = (function () {
+  const B64URL = /^[A-Za-z0-9_-]+$/;
+  const HEX32 = /^0x[0-9a-f]{64}$/;
+
+  function encode(proof, txHash) {
+    const e = proof.entry;
+    const json = JSON.stringify({ v: 1, e: [e.id, e.ts, e.username, e.role, e.action, e.details], s: proof.siblings, b: proof.batchId, t: txHash });
+    const bin = Array.from(new TextEncoder().encode(json), (b) => String.fromCharCode(b)).join("");
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function decode(str) {
+    if (typeof str !== "string" || !B64URL.test(str)) throw new Error("Not an UrbanPulse seal link");
+    let obj;
+    try {
+      const b64 = str.replace(/-/g, "+").replace(/_/g, "/");
+      const bytes = Uint8Array.from(atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0));
+      obj = JSON.parse(new TextDecoder().decode(bytes));
+    } catch {
+      throw new Error("This seal link is damaged or incomplete");
+    }
+    if (!obj || obj.v !== 1) throw new Error("Unsupported seal version");
+    const e = obj.e;
+    if (!Array.isArray(e) || e.length !== 6 || typeof e[1] !== "number" || typeof e[5] !== "string") throw new Error("Seal entry is malformed");
+    if (!Array.isArray(obj.s) || !obj.s.every((s) => typeof s === "string" && HEX32.test(s))) throw new Error("Seal proof is malformed");
+    if (typeof obj.b !== "number") throw new Error("Seal batch is malformed");
+    return { entry: { id: e[0], ts: e[1], username: e[2], role: e[3], action: e[4], details: e[5] }, siblings: obj.s, batchId: obj.b, txHash: obj.t };
+  }
+
+  return { encode, decode };
+  })();
+
+  // Same leaf and sorted-pair hashing as server/anchor.js
+  const $ = (id) => document.getElementById(id);
+  const leafOf = (e) => ethers.keccak256(ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify([e.id, e.ts, e.username, e.role, e.action, e.details]))));
+  const pairHash = (a, b) => ethers.keccak256(a < b ? ethers.concat([a, b]) : ethers.concat([b, a]));
+  const rootOf = (leaf, siblings) => siblings.reduce((h, s) => pairHash(h, s), leaf);
+
+  function fail(message) {
+    $("error").textContent = message;
+    $("error").hidden = false;
+  }
+
+  function render(raw) {
+    $("example").hidden = true;
+    let payload;
+    let details;
+    try {
+      payload = UPPayload.decode(raw);
+      details = JSON.parse(payload.entry.details);
+    } catch (err) {
+      return fail(err instanceof SyntaxError ? "The alert text in this link is not readable." : err.message);
+    }
+    if (typeof ethers === "undefined") return fail("The checker library did not load. Check the connection and reload this page.");
+
+    const fingerprint = rootOf(leafOf(payload.entry), payload.siblings);
+    $("message").textContent = details.message ?? "";
+    $("zone").textContent = details.zone ?? "";
+    $("severity").textContent = details.severity ?? "";
+    $("code").textContent = details.code ?? "";
+    $("issued").textContent = new Date(payload.entry.ts).toLocaleString();
+    $("root").textContent = fingerprint;
+    $("contract").textContent = CONTRACT;
+    $("chain").textContent = CHAIN_ID;
+    $("prefix").textContent = ethers.id("anchor(bytes32,uint32)").slice(0, 10) + fingerprint.slice(2);
+
+    const txArea = $("txArea");
+    if (typeof payload.txHash === "string" && /^0x[0-9a-fA-F]{64}$/.test(payload.txHash)) {
+      const link = document.createElement("a");
+      link.className = "btn";
+      link.href = `${EXPLORER}/tx/${payload.txHash}`;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      link.textContent = "Open the transaction on the Shardeum explorer";
+      txArea.replaceChildren(link);
+    } else {
+      const note = document.createElement("div");
+      note.className = "error";
+      note.textContent = "This link has no valid transaction hash, so the seal cannot be checked on the explorer.";
+      txArea.replaceChildren(note);
+    }
+
+    $("status").hidden = false;
+    $("result").hidden = false;
+  }
+
+  $("copy").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText($("root").textContent);
+      $("copy").textContent = "Copied";
+    } catch {
+      const range = document.createRange();
+      range.selectNodeContents($("root"));
+      getSelection().removeAllRanges();
+      getSelection().addRange(range);
+      $("copy").textContent = "Fingerprint selected, copy it";
+    }
+  });
+
+  const raw = location.hash.slice(1).trim();
+  if (raw) render(raw);
+</script>
