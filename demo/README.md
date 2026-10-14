@@ -94,6 +94,16 @@ Demo steps (use one browser for the citizen app):
 
 Model and experiment: `experiments/fusion.js`, results in `experiments/results/fusion.md`.
 
+## IMD rainfall alerts
+
+A second alert channel, alongside the level-based alerts, works from 24-hour rain totals (`server/imd.js`). Each zone's total over the 24 hours before the current hour is compared with the India Meteorological Department 24 h categories: heavy from 64.5 mm, very heavy from 115.6 mm, extremely heavy from 204.5 mm. The rule runs on every rainfall refresh (every 10 minutes), using fresh data only.
+
+- Observed: an alert fires when a zone's category rises (warning for heavy, danger for very heavy or more). It does not repeat while the category holds, and a drop re-arms the zone.
+- Forecast: an alert fires when the next 24 h total reaches very heavy or more (warning).
+- Alerts are sent as SMS and push and are sealed like every other alert (verification code, public audit record, blockchain anchoring).
+
+The choice of this rule is backed by `experiments/results/replay.md` (Model B). In the November 2023 control month, assumed flood-free, the 24-hour rule raised no alerts, while the level rule raised 1 to 35 warnings per zone. The trade-off is timing: for the Michaung flood the 24-hour rule's danger alerts came on the flood day itself (4 December), later than the level rule's for Velachery. It is added as a second channel, not a replacement.
+
 ## Evacuation experiment
 
 ```bash

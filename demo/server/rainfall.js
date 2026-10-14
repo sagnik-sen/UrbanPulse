@@ -12,12 +12,13 @@ function buildUrl(zones) {
     hourly: "precipitation,precipitation_probability",
     timezone: TIMEZONE,
     forecast_days: "2",
+    past_days: "1",
   });
   return `${API}?${q}`;
 }
 
 // Open-Meteo returns an array for several coordinates, a single object for one.
-// Output per zone: current rate, the next 24 hourly values, total and peak.
+// Output per zone: current rate, the next 24 hourly values, their total and peak, and the 24 h before now.
 function parseRainfall(zones, body) {
   const list = Array.isArray(body) ? body : [body];
   if (list.length !== zones.length) throw new Error(`expected ${zones.length} locations, got ${list.length}`);
@@ -37,8 +38,10 @@ function parseRainfall(zones, body) {
       prob: prob[start + k] == null ? null : Number(prob[start + k]),
     }));
     const peak = hourly.reduce((best, h) => (h.mm > best.mm ? h : best), { mm: 0, time: null });
+    const past = mm.slice(Math.max(0, start - 24), start);
     out[z.id] = {
       currentMmPerHr: Number(d.current?.precipitation) || 0,
+      past24hMm: Math.round(past.reduce((s, v) => s + (Number(v) || 0), 0) * 10) / 10,
       next24hMm: Math.round(hourly.reduce((s, h) => s + h.mm, 0) * 10) / 10,
       peakMmPerHr: peak.mm,
       peakAt: peak.time,

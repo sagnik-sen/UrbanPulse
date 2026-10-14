@@ -13,6 +13,7 @@ const { randomUUID } = require("node:crypto");
 const { createAuth, attachUser, requireRole } = require("./auth");
 const { createZones, createShelters, stepZones, injectStorm } = require("./simulator");
 const { createRainfallFeed } = require("./rainfall");
+const { imdAlerts, withCategories } = require("./imd");
 const { createAnchor } = require("./anchor");
 const { buildTimelines, summarize } = require("./accountability");
 const { fusedZones } = require("./fusion-live");
@@ -238,10 +239,19 @@ function tick() {
 setInterval(tick, 2000);
 
 const rainfall = createRainfallFeed(LOCATIONS);
+function rainfallView() {
+  const state = rainfall.get();
+  return { ...state, zones: withCategories(state.zones) };
+}
 async function refreshRainfall() {
   const state = await rainfall.refresh();
   if (state.error) console.warn(`rainfall refresh failed: ${state.error}`);
-  io.emit("rainfall-update", state);
+  if (!state.stale) {
+    const imd = imdAlerts(db.getSetting("imdAlertState", {}), LOCATIONS, state, Date.now());
+    db.setSetting("imdAlertState", imd.state);
+    for (const a of imd.alerts) addBroadcast({ zoneId: a.zoneId, severity: a.severity, message: a.message, channels: ["sms", "push"], source: "auto" });
+  }
+  io.emit("rainfall-update", rainfallView());
 }
 refreshRainfall();
 setInterval(refreshRainfall, RAIN_REFRESH_MS);
@@ -272,11 +282,11 @@ app.get("/api/auth/me", (req, res) => {
 
 // citizen app: live levels, shelters, public alerts; nothing with reporter names or dispatch details
 app.get("/api/public-state", (req, res) => {
-  res.json({ locations: currentSnapshot(), broadcasts, shelters: SHELTERS, thresholds, rainfall: rainfall.get(), rainLink });
+  res.json({ locations: currentSnapshot(), broadcasts, shelters: SHELTERS, thresholds, rainfall: rainfallView(), rainLink });
 });
 
 app.get("/api/state", requireRole(...STAFF), (req, res) => {
-  res.json({ locations: currentSnapshot(), history, incidents, reports: citizenReports, broadcasts, shelters: SHELTERS, teams: TEAMS, thresholds, rainfall: rainfall.get(), rainLink, offlineSensors: [...offlineSensors] });
+  res.json({ locations: currentSnapshot(), history, incidents, reports: citizenReports, broadcasts, shelters: SHELTERS, teams: TEAMS, thresholds, rainfall: rainfallView(), rainLink, offlineSensors: [...offlineSensors] });
 });
 
 app.put("/api/thresholds", requireRole("admin"), (req, res) => {

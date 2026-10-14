@@ -8,9 +8,16 @@ import MapReady from "../MapReady";
 import { RainStrip } from "../Rainfall";
 import { useAuth } from "../AuthContext";
 
+const SEVERE_IMD = new Set(["veryHeavy", "extremelyHeavy"]);
+
 export default function Overview() {
-  const { locations, trend, incidents, reports, broadcasts, shelters } = useFloodData();
+  const { locations, trend, incidents, reports, broadcasts, shelters, rainfall } = useFloodData();
   const { can } = useAuth();
+
+  const imdSevere = locations.filter((l) => {
+    const r = rainfall?.zones?.[l.id];
+    return r && (SEVERE_IMD.has(r.imdObserved) || SEVERE_IMD.has(r.imdForecast));
+  });
 
   const counts = useMemo(() => ({
     safe: locations.filter((l) => l.risk === "safe").length,
@@ -33,6 +40,15 @@ export default function Overview() {
 
   return (
     <>
+      {imdSevere.length > 0 && (
+        <div className="action-banner">
+          IMD very heavy rain: {imdSevere.map((l) => {
+            const r = rainfall.zones[l.id];
+            const observed = SEVERE_IMD.has(r.imdObserved);
+            return `${l.name} (${observed ? `${r.past24hMm} mm in the last 24 h` : `${r.next24hMm} mm forecast`})`;
+          }).join(", ")}
+        </div>
+      )}
       {unassigned > 0 && can.respond && (
         <Link to="/incidents" className="action-banner">
           ⚠ {unassigned} active incident{unassigned > 1 ? "s" : ""} with no response team assigned. Dispatch now →
