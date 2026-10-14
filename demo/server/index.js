@@ -722,6 +722,31 @@ app.get("/api/alerts/verify/:code", async (req, res) => {
   }
 });
 
+const { handleSms } = require("./sms");
+// Simulated SMS gateway: a telecom gateway would post { from, text } here and send back { reply }.
+// The sender number is only validated; it is never stored or logged.
+app.post("/api/sms/inbound", async (req, res) => {
+  const { from, text } = req.body || {};
+  if (typeof text !== "string" || text.length > 500) return res.status(400).json({ error: "text must be a string of up to 500 characters" });
+  if (from !== undefined && !(typeof from === "string" && from.length <= 20 && /^[0-9+]*$/.test(from))) return res.status(400).json({ error: "from must be a phone number" });
+  // same lookup and chain check as /api/alerts/verify/:code, reduced to the verification status
+  const findAlert = async (code) => {
+    const row = db.findAlert(code);
+    if (!row) return { status: "notfound" };
+    const d = JSON.parse(row.details);
+    const alert = { code, zone: d.zone, severity: d.severity, message: d.message, source: d.source, issuedAt: row.ts };
+    if (!chain.enabled) return { status: "unavailable", alert };
+    if (row.batch_id == null) return { status: "pending", alert };
+    try {
+      return { status: (await chain.verifyEntry(row.id, row.batch_id)).status, alert };
+    } catch {
+      return { status: "unreachable", alert };
+    }
+  };
+  const reply = await handleSms(text, { zones: currentSnapshot(), shelters: SHELTERS, rain: rainfallView().zones, findAlert });
+  res.json({ reply });
+});
+
 const chainError = (res, err) => res.status(502).json({ error: `Blockchain unreachable: ${err.shortMessage || err.message}` });
 
 app.post("/api/audit/anchor", requireRole("admin"), async (req, res) => {

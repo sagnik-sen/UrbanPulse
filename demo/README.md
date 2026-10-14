@@ -176,6 +176,42 @@ explorer transaction where the same fingerprint is stored. The page's contract a
 address are fixed in the file. Host `verify.html` on any static site and put its public URL in `client/.env.local` as
 `VITE_VERIFIER_URL=...` (git-ignored); until then the QR is generated but flagged as not yet pointing anywhere.
 
+## Offline and SMS
+
+The citizen app (`/citizen`) can be installed to a phone's home screen and keeps working when the
+network fails, as it did in the December 2015 Chennai floods. The service worker is
+`client/public/sw.js` and runs only in production builds.
+
+- **Cached:** the app's code and styles (after the first online visit), the citizen page, and the last
+  levels, alerts, shelters and rainfall. The saved copy also sits in the browser under
+  `urbanpulse.citizen.snapshot`, written at most every 10 seconds.
+- **Not cached:** map tiles (the map is blank offline), route planning, reports, sign-in, the
+  blockchain check and live socket updates. These always go to the network.
+
+When the server cannot be reached the page shows the saved data with the time it was saved, and the
+alert check compares a pasted code with the alerts saved on that phone.
+
+Demo:
+
+```bash
+cd demo/server && npm start              # terminal 1
+cd demo/client && npm run demo:offline   # terminal 2: production build on http://localhost:4173
+```
+
+Open http://localhost:4173/citizen while online, so the app is cached. Then stop the server
+(Ctrl-C in terminal 1) and reload. The page shows the saved data with the offline banner.
+
+**Simulated SMS.** For areas with no data, the citizen page has a "No internet? Use SMS" card that
+posts to `POST /api/sms/inbound` (`sms.js`). This stands in for a telecom SMS gateway: nothing is
+sent over a real network and the sender's number is not stored. Commands are case-insensitive:
+
+- `VERIFY UP-1A2B3C4D`, or forward the whole alert text: replies GENUINE, PENDING, ALTERED or NOT an official alert.
+- `SHELTER <area>` (`முகாம்`): the nearest shelter with free beds.
+- `STATUS <area>` (`நிலை`): water level, risk, and the IMD 24 h rain category when there is one.
+- `HELP` (`உதவி`), or anything else: the command menu.
+
+Area names match an exact name, a prefix, or any part of a zone name, so `SHELTER mar` finds Pallikaranai Marshland.
+
 ## Talking points
 
 - Swap `stepZones()` in `server/simulator.js` for real sensor ingestion and `server/forecast.js` for the trained LSTM once hardware/data exist. The rest of the app only reads the forecast path it returns

@@ -7,6 +7,9 @@ import { t, useLang } from "../i18n";
 import MapReady from "../MapReady";
 import ReportModal from "../ReportModal";
 import Toasts from "../Toasts";
+import OfflineBanner, { offlineCheckText } from "../OfflineBanner";
+import SmsDemo from "../SmsDemo";
+import { loadSnapshot } from "../offline";
 import { DangerZones, RouteLayer, RouteSummary, useEvacuation } from "../EvacuationRoute";
 
 const AREA_KEY = "urbanpulse.citizen.area";
@@ -68,12 +71,15 @@ function AlertCheck({ request, lang }) {
     setChecking(true);
     try {
       const res = await fetch(`/api/alerts/verify/${encodeURIComponent(c)}`);
+      if (res.status >= 500) throw new Error(`HTTP ${res.status}`); // proxy error while the server is down
       const data = await res.json().catch(() => ({}));
       if (res.status === 404) setResult({ status: "notfound", code: c });
       else if (!res.ok) setResult(data.error ? { error: data.error } : { errorKey: "verify.failed" });
       else setResult(data);
     } catch {
-      setResult({ errorKey: "verify.offline" });
+      // no connection: match the code against the alerts this phone saved earlier
+      const saved = loadSnapshot()?.broadcasts?.find((b) => b.code === c);
+      setResult({ error: offlineCheckText(lang, saved?.message) });
     } finally {
       setChecking(false);
     }
@@ -220,6 +226,7 @@ export default function Citizen() {
 
   return (
     <div className="citizen" lang={lang === "ta" ? "ta" : "en"}>
+      <OfflineBanner lang={lang} />
       <header className="citizen-header">
         <div className="brand">
           <div className="brand-mark">UP</div>
@@ -323,6 +330,8 @@ export default function Citizen() {
           </a>
         ))}
       </section>
+
+      <SmsDemo lang={lang} />
 
       <p className="muted small c-foot">{t(lang, "foot")}</p>
       {lang === "ta" && <p className="muted small c-foot">{t(lang, "note.draft")}</p>}

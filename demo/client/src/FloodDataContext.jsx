@@ -1,9 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { useAuth } from "./AuthContext";
+import { loadSnapshot, saveSnapshot } from "./offline";
 
 // same-origin: Vite proxies /api and /socket.io to the backend in dev
 const SERVER_URL = "";
+const SNAPSHOT_EVERY_MS = 10000;
 const FloodDataContext = createContext(null);
 
 const fmtTime = (ts) => new Date(ts).toLocaleTimeString();
@@ -46,6 +48,12 @@ export function FloodDataProvider({ children }) {
   const [liveAudit, setLiveAudit] = useState([]); // pushed only to admins' sockets
   const [liveAnchors, setLiveAnchors] = useState({}); // audit id -> { batch_id, tx_hash } as batches land on-chain
   const [offlineSensors, setOfflineSensors] = useState([]); // zone ids whose water-level sensor is switched off
+  const [offline, setOffline] = useState(false); // showing the saved snapshot, no live data since
+  const [snapshotAt, setSnapshotAt] = useState(null); // when the data on screen was saved
+  const [online, setOnline] = useState(() => navigator.onLine);
+  const latestPublic = useRef(null);
+  const snapshotSaved = useRef(0);
+  const snapshotTimer = useRef(null);
 
   const pushToast = useCallback((toast) => {
     const id = Date.now() + Math.random();
@@ -60,8 +68,13 @@ export function FloodDataProvider({ children }) {
     let cancelled = false;
     fetch(`${SERVER_URL}${userId ? "/api/state" : "/api/public-state"}`)
       .then((r) => {
-        if (r.status === 401) expire();
-        return r.ok ? r.json() : null;
+        if (r.status === 401) {
+          expire();
+          return null;
+        }
+        // a copy served by the service worker while the network was down is marked; it counts as a failed fetch
+        if (!r.ok || r.headers.get("X-UrbanPulse-Cache")) throw new Error("state unavailable");
+        return r.json();
       })
       .then((s) => {
         if (cancelled || !s) return;
@@ -76,10 +89,46 @@ export function FloodDataProvider({ children }) {
         setRainfall(s.rainfall ?? null);
         setRainLinkState(s.rainLink ?? true);
         setOfflineSensors(s.offlineSensors ?? []);
+        setOffline(false);
       })
-      .catch(() => {});
+      .catch(() => {
+        // no connection: show the state saved on this phone, flagged with its age
+        if (cancelled) return;
+        const snap = loadSnapshot();
+        if (!snap) return;
+        setLocations(snap.locations);
+        setBroadcasts(snap.broadcasts ?? []);
+        setShelters(snap.shelters ?? []);
+        setRainfall(snap.rainfall ?? null);
+        setSnapshotAt(snap.savedAt);
+        setOffline(true);
+      });
     return () => { cancelled = true; };
   }, [userId, expire]);
+
+  // at most one save per 10 s, with the newest data; a snapshot being shown is never saved again as fresh
+  useEffect(() => {
+    if (offline || !locations.length) return;
+    latestPublic.current = { locations, broadcasts, shelters, rainfall };
+    if (snapshotTimer.current) return;
+    snapshotTimer.current = setTimeout(() => {
+      snapshotTimer.current = null;
+      snapshotSaved.current = Date.now();
+      const savedAt = saveSnapshot(latestPublic.current);
+      if (savedAt) setSnapshotAt(savedAt);
+    }, Math.max(0, SNAPSHOT_EVERY_MS - (Date.now() - snapshotSaved.current)));
+  }, [locations, broadcasts, shelters, rainfall, offline]);
+
+  useEffect(() => {
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    return () => {
+      window.removeEventListener("online", up);
+      window.removeEventListener("offline", down);
+    };
+  }, []);
 
   useEffect(() => {
     const socket = io();
@@ -87,6 +136,7 @@ export function FloodDataProvider({ children }) {
     socket.on("disconnect", () => setConnected(false));
 
     socket.on("sensor-update", (payload) => {
+      setOffline(false);
       setLocations(payload);
       const time = fmtTime(payload[0]?.ts ?? Date.now());
       setHistory((prev) => {
@@ -144,7 +194,7 @@ export function FloodDataProvider({ children }) {
   });
 
   const value = {
-    locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts, rainfall, rainLink, liveAudit, liveAnchors, offlineSensors,
+    locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts, rainfall, rainLink, liveAudit, liveAnchors, offlineSensors, offline, online, snapshotAt,
     pushToast,
     dismissToast,
     submitReport: (body) => api("/api/citizen-report", "POST", body),

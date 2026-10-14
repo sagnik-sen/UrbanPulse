@@ -1,0 +1,11 @@
+{
+  "name": "UrbanPulse Chennai",
+  "short_name": "UrbanPulse",
+  "start_url": "/citizen",
+  "display": "standalone",
+  "background_color": "#0d0d0d",
+  "theme_color": "#141414",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
