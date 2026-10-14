@@ -15,6 +15,7 @@ const { createZones, createShelters, stepZones, injectStorm } = require("./simul
 const { createRainfallFeed } = require("./rainfall");
 const { createAnchor } = require("./anchor");
 const { buildTimelines, summarize } = require("./accountability");
+const { fusedZones } = require("./fusion-live");
 
 // optional server/.env holds the signing key for blockchain anchoring; the app runs without it
 try { process.loadEnvFile(path.join(__dirname, ".env")); } catch {}
@@ -119,7 +120,12 @@ const saveReport = (r) => db.save("reports", r, r.ts);
 const saveBroadcast = (b) => db.save("broadcasts", b, b.ts);
 let t = 0;
 
+// zones whose water-level sensor an admin has taken offline; their level is ignored by fusion
+const offlineSensors = new Set(db.getSetting("offlineSensors", []));
+
 function currentSnapshot() {
+  const now = Date.now();
+  const fused = fusedZones({ zones: LOCATIONS.map((l) => ({ id: l.id, level: Math.round(l.level) })), reports: citizenReports, offline: offlineSensors, now });
   return LOCATIONS.map((loc) => {
     const { path, forecastHours } = zoneForecast(loc);
     return {
@@ -132,7 +138,8 @@ function currentSnapshot() {
       risk: riskLevel(loc.level),
       forecastHours,
       forecast: path,
-      ts: Date.now(),
+      fused: fused[loc.id],
+      ts: now,
     };
   });
 }
@@ -262,7 +269,7 @@ app.get("/api/public-state", (req, res) => {
 });
 
 app.get("/api/state", requireRole(...STAFF), (req, res) => {
-  res.json({ locations: currentSnapshot(), history, incidents, reports: citizenReports, broadcasts, shelters: SHELTERS, teams: TEAMS, thresholds, rainfall: rainfall.get(), rainLink });
+  res.json({ locations: currentSnapshot(), history, incidents, reports: citizenReports, broadcasts, shelters: SHELTERS, teams: TEAMS, thresholds, rainfall: rainfall.get(), rainLink, offlineSensors: [...offlineSensors] });
 });
 
 app.put("/api/thresholds", requireRole("admin"), (req, res) => {
@@ -293,11 +300,26 @@ app.post("/api/simulate/storm", requireRole("admin"), (req, res) => {
   res.json({ ok: true });
 });
 
+app.put("/api/sensors/:zoneId", requireRole("admin"), (req, res) => {
+  const zone = LOCATIONS.find((l) => l.id === req.params.zoneId);
+  if (!zone) return res.status(404).json({ error: "unknown zone" });
+  if (typeof req.body?.online !== "boolean") return res.status(400).json({ error: "online must be true or false" });
+  const online = req.body.online;
+  if (online) offlineSensors.delete(zone.id);
+  else offlineSensors.add(zone.id);
+  db.setSetting("offlineSensors", [...offlineSensors]);
+  audit(req.user, "sensor_status", { zoneId: zone.id, zone: zone.name, online });
+  io.emit("sensors-offline", [...offlineSensors]);
+  res.json({ zoneId: zone.id, online, offline: [...offlineSensors] });
+});
+
 const CATEGORIES = new Set(["waterlogging", "drain_blocked", "road_closed", "power_hazard", "rescue_needed", "other"]);
 const SEVERITIES = new Set(["low", "medium", "high"]);
+// random per-browser id from the citizen app; it keys reporter trust, so it is never shown publicly
+const DEVICE_ID = /^[0-9a-f-]{36}$/i;
 
 app.post("/api/citizen-report", (req, res) => {
-  const { lat, lng, category, severity, description, reporter } = req.body;
+  const { lat, lng, category, severity, description, reporter, deviceId } = req.body;
   if (typeof lat !== "number" || typeof lng !== "number" || !description || !String(description).trim()) {
     return res.status(400).json({ error: "lat, lng and description are required" });
   }
@@ -310,6 +332,7 @@ app.post("/api/citizen-report", (req, res) => {
     severity: SEVERITIES.has(severity) ? severity : "medium",
     description: String(description).slice(0, 500),
     reporter: reporter ? String(reporter).slice(0, 60) : "Anonymous",
+    deviceId: typeof deviceId === "string" && DEVICE_ID.test(deviceId) ? deviceId : null,
     zoneId: zone.id,
     zoneName: zone.name,
     ts: Date.now(),
@@ -319,13 +342,14 @@ app.post("/api/citizen-report", (req, res) => {
   citizenReports = citizenReports.slice(0, REPORTS_CAP);
   saveReport(report);
   toStaff("citizen-report", report);
-  res.json(report);
+  const { deviceId: _ownDevice, ...receipt } = report;
+  res.json(receipt);
 });
 
 app.patch("/api/citizen-report/:id", requireRole(...RESPONDERS), (req, res) => {
   const report = citizenReports.find((r) => r.id === req.params.id);
   if (!report) return res.status(404).json({ error: "not found" });
-  if (["open", "in_progress", "resolved"].includes(req.body.status) && req.body.status !== report.status) {
+  if (["open", "in_progress", "resolved", "rejected"].includes(req.body.status) && req.body.status !== report.status) {
     audit(req.user, "report_status", { reportId: report.id, zone: report.zoneName, from: report.status, to: req.body.status });
     report.status = req.body.status;
   }
@@ -599,7 +623,7 @@ app.post("/api/evacuation-plan/execute", requireRole(...RESPONDERS), (req, res) 
   res.json({ ok: true, heldSeats: plan.metrics.assigned, unassigned, zones: request.zoneIds.length });
 });
 
-const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared"]);
+const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared", "sensor_status"]);
 
 app.get("/api/audit", requireRole("admin"), (req, res) => {
   const action = AUDIT_ACTIONS.has(req.query.action) ? req.query.action : undefined;

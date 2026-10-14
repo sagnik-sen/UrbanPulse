@@ -1,6 +1,6 @@
 # UrbanPulse Chennai
 
-AI-powered smart flood monitoring system for Chennai, built for BCSE355L – Design of Smart Cities (VIT Chennai).
+Smart flood monitoring and response system for Chennai (forecasting, evacuation planning and blockchain-sealed records), built for BCSE355L – Design of Smart Cities (VIT Chennai).
 
 Chennai floods almost every Northeast Monsoon (2015 floods, Cyclone Michaung in 2023), and response is still mostly reactive. UrbanPulse is a proposed system that combines IoT water-level sensors, flood forecasting and automated alerts so the city can act before roads go under.
 

@@ -10,6 +10,22 @@ function nearest(locations, lat, lng) {
   }, null)?.loc;
 }
 
+// reporter trust is keyed on this id; if storage is blocked, it lasts only for this page load
+const DEVICE_KEY = "urbanpulse.citizen.device";
+let pageDeviceId;
+function citizenDeviceId() {
+  try {
+    const saved = localStorage.getItem(DEVICE_KEY);
+    if (saved) return saved;
+    const id = crypto.randomUUID();
+    localStorage.setItem(DEVICE_KEY, id);
+    return id;
+  } catch {
+    pageDeviceId ??= crypto.randomUUID();
+    return pageDeviceId;
+  }
+}
+
 export default function ReportModal({ location, defaultZoneId, onClose, lang = "en" }) {
   const { locations, submitReport, pushToast } = useFloodData();
   const [zoneId, setZoneId] = useState(defaultZoneId ?? locations[0]?.id ?? "");
@@ -43,7 +59,7 @@ export default function ReportModal({ location, defaultZoneId, onClose, lang = "
     const lng = location ? location.lng : zone.lng + (Math.random() - 0.5) * 0.01;
     setSubmitting(true);
     try {
-      await submitReport({ lat, lng, category, severity, description: description.trim(), reporter: reporter.trim() });
+      await submitReport({ lat, lng, category, severity, description: description.trim(), reporter: reporter.trim(), deviceId: citizenDeviceId() });
       pushToast({ kind: "info", title: t(lang, "report.filed"), text: t(lang, "report.routed", { zone: zone?.name ?? t(lang, "report.nearestZone") }) });
       onClose();
     } catch (err) {

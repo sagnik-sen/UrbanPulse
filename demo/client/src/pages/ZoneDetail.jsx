@@ -59,7 +59,7 @@ export default function ZoneDetail() {
 
       <section className="kpi-row" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
         <div className="kpi"><div className="kpi-label">Current water level</div><div className="kpi-value" style={{ color: STATUS[loc.risk].color }}>{loc.level}%</div></div>
-        <div className="kpi"><div className="kpi-label">AI forecast</div><div className="kpi-value small">{loc.risk === "danger" ? "At critical level" : loc.forecastHours != null ? `Critical in ~${loc.forecastHours}h` : "Stable / receding"}</div></div>
+        <div className="kpi"><div className="kpi-label">Forecast</div><div className="kpi-value small">{loc.risk === "danger" ? "At critical level" : loc.forecastHours != null ? `Critical in ~${loc.forecastHours}h` : "Stable / receding"}</div></div>
         <div className="kpi"><div className="kpi-label">Population</div><div className="kpi-value small">{formatCount(loc.population)}</div></div>
         <div className="kpi"><div className="kpi-label">Projected peak (next 2h)</div><div className="kpi-value small">{peak ? `${peak.mean}% at +${peak.h * SIM_MIN_PER_TICK}m` : "Gathering data…"}</div></div>
       </section>

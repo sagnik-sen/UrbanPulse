@@ -45,6 +45,7 @@ export function FloodDataProvider({ children }) {
   const [rainLink, setRainLinkState] = useState(true);
   const [liveAudit, setLiveAudit] = useState([]); // pushed only to admins' sockets
   const [liveAnchors, setLiveAnchors] = useState({}); // audit id -> { batch_id, tx_hash } as batches land on-chain
+  const [offlineSensors, setOfflineSensors] = useState([]); // zone ids whose water-level sensor is switched off
 
   const pushToast = useCallback((toast) => {
     const id = Date.now() + Math.random();
@@ -74,6 +75,7 @@ export function FloodDataProvider({ children }) {
         setThresholds(s.thresholds);
         setRainfall(s.rainfall ?? null);
         setRainLinkState(s.rainLink ?? true);
+        setOfflineSensors(s.offlineSensors ?? []);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -124,6 +126,7 @@ export function FloodDataProvider({ children }) {
       return next;
     }));
     socket.on("rain-link-updated", ({ rainLink: on }) => setRainLinkState(on));
+    socket.on("sensors-offline", setOfflineSensors);
     socket.on("data-cleared", ({ thresholds: t }) => {
       setIncidents([]);
       setReports([]);
@@ -141,7 +144,7 @@ export function FloodDataProvider({ children }) {
   });
 
   const value = {
-    locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts, rainfall, rainLink, liveAudit, liveAnchors,
+    locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts, rainfall, rainLink, liveAudit, liveAnchors, offlineSensors,
     pushToast,
     dismissToast,
     submitReport: (body) => api("/api/citizen-report", "POST", body),
@@ -153,6 +156,7 @@ export function FloodDataProvider({ children }) {
     planEvacuation,
     clearDemoData: () => call(api("/api/admin/clear-data", "POST", {})),
     setRainLink: (enabled) => call(api("/api/settings/rain-link", "PUT", { enabled })).then((r) => setRainLinkState(r.rainLink)),
+    setSensorOnline: (zoneId, online) => call(api(`/api/sensors/${zoneId}`, "PUT", { online })).then((r) => setOfflineSensors(r.offline)),
     fetchAudit: (action) => call(fetch(`${SERVER_URL}/api/audit?limit=500${action ? `&action=${encodeURIComponent(action)}` : ""}`).then(async (r) => {
       const data = await r.json();
       if (!r.ok) throw Object.assign(new Error(data.error || "Request failed"), { status: r.status });

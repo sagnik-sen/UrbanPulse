@@ -76,6 +76,24 @@ Covers the forecast model, forecast-based flood risk, route scoring and detours,
 shelter assignment (checked against brute force), the shared group planner, the seeded
 simulator, SQLite storage and sign-in/roles.
 
+## Citizen report fusion
+
+Each zone's water-level sensor is fused with citizen reports (`server/fusion.js`; the live wiring is in `server/fusion-live.js`). Sensor Grid shows each zone's recent report count and flood likelihood. Reports fade with a 30-second half-life and drop out after two minutes of demo time, so run the steps below quickly.
+
+- An admin can take a zone's sensor offline (Sensor Grid, "Take sensor offline"). The zone then ignores its level and is judged from citizen reports alone. A "Flooding reported by citizens" badge appears at 50% likelihood.
+- Each citizen browser has a random id. A reporter starts at 25% trust; reports that are resolved or in progress confirm them, and staff can mark a report "False report" to lower that reporter's trust. Citizen Reports shows each reporter's trust.
+- A reporter with no confirmed reports is capped, so a burst from new devices cannot flag a zone (see `NEW_DEVICE_CAP`).
+- Incidents, alerts and evacuation planning are still triggered by sensor levels only. Fusion is advisory in this version.
+
+Demo steps (use one browser for the citizen app):
+
+1. Sensor Grid: take one zone's sensor offline.
+2. Citizen app: file three high-severity reports for that zone. The likelihood stays low, because a new reporter counts for little.
+3. Citizen Reports: set three of those reports to "In progress". The reporter is now trusted, and the likelihood jumps. File three more reports from the citizen app; the zone shows "Flooding reported by citizens".
+4. Mark one report "False report". That reporter's trust drops.
+
+Model and experiment: `experiments/fusion.js`, results in `experiments/results/fusion.md`.
+
 ## Evacuation experiment
 
 ```bash
