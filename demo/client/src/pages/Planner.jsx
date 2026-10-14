@@ -9,6 +9,14 @@ import { DangerZones } from "../EvacuationRoute";
 // one colour per shelter so each route reads as "these people go there"
 const SHELTER_COLOR = { s1: "#3987e5", s2: "#d95926", s3: "#199e70", s4: "#c98500", s5: "#d55181", s6: "#9085e9" };
 
+// priority tiers, in the order the planner places them (server: planWithPriority)
+const TIERS = [
+  ["accessible", "Mobility or medical need (accessible shelters)"],
+  ["priority", "Elderly or infant (any shelter)"],
+  ["general", "Everyone else"],
+];
+const TIER_TAG = { accessible: "accessible bed", priority: "priority" };
+
 const METRIC_ROWS = [
   ["assigned", "Evacuees with a bed", (v, m) => `${v} / ${m.evacuees}`, "higher"],
   ["meanTravelMin", "Mean travel", (v) => `${v} min`, "lower"],
@@ -177,6 +185,34 @@ export default function Planner() {
             Both plans are judged against the same live forecast. Green = proposed plan does better.
           </p>
 
+          {result.priority && (
+            <section className="panel">
+              <div className="panel-head">
+                <h2>Priority evacuation</h2>
+                <span className="muted small">Registered vulnerable residents are placed first. Mobility and medical needs go only to accessible shelters</span>
+              </div>
+              <table className="table">
+                <thead>
+                  <tr><th>Proposed plan, by tier</th><th>People</th><th>With a bed</th><th>Without a bed</th><th>Mean travel</th></tr>
+                </thead>
+                <tbody>
+                  {TIERS.map(([k, label]) => {
+                    const m = result.priority.byTier[k];
+                    return (
+                      <tr key={k}>
+                        <td>{label}</td>
+                        <td className="mono">{m.people}</td>
+                        <td className="mono">{m.assigned}</td>
+                        <td className="mono">{m.unassigned}</td>
+                        <td className="mono">{m.assigned ? `${m.meanTravelMin.toFixed(1)} min` : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </section>
+          )}
+
           <section className="panel" style={{ padding: 0, overflow: "hidden" }}>
             <div className="panel-head" style={{ padding: "16px 18px 12px" }}>
               <h2>Routes</h2>
@@ -194,12 +230,12 @@ export default function Planner() {
               <FitRoutes assignments={plan.assignments} />
               <DangerZones locations={locations} />
               {plan.assignments.map((a) => (
-                <Polyline key={`${a.originId}|${a.shelterId}`} positions={a.coords} pathOptions={{ color: SHELTER_COLOR[a.shelterId], weight: 4, opacity: 0.85, dashArray: a.shelterAtRisk ? "6 6" : undefined }}>
+                <Polyline key={`${a.originId}|${a.shelterId}|${a.tier}`} positions={a.coords} pathOptions={{ color: SHELTER_COLOR[a.shelterId], weight: 4, opacity: 0.85, dashArray: a.shelterAtRisk ? "6 6" : undefined }}>
                   <Tooltip sticky>{a.people} people · {a.zoneName} → {a.shelterName} · {a.durationMin} min</Tooltip>
                 </Polyline>
               ))}
               {plan.assignments.map((a) => (
-                <CircleMarker key={`o-${a.originId}-${a.shelterId}`} center={[a.from.lat, a.from.lng]} radius={5} pathOptions={{ color: "#fff", fillColor: "#fff", fillOpacity: 1, weight: 1 }} />
+                <CircleMarker key={`o-${a.originId}-${a.shelterId}-${a.tier}`}center={[a.from.lat, a.from.lng]} radius={5} pathOptions={{ color: "#fff", fillColor: "#fff", fillOpacity: 1, weight: 1 }} />
               ))}
               {plan.shelterLoads.map((l) => {
                 const s = result.freeBeds.find((f) => f.id === l.id);
@@ -225,9 +261,9 @@ export default function Planner() {
               </thead>
               <tbody>
                 {plan.assignments.map((a) => (
-                  <tr key={`${a.originId}|${a.shelterId}`}>
+                  <tr key={`${a.originId}|${a.shelterId}|${a.tier}`}>
                     <td>{a.zoneName} <span className="muted small">({a.originId.split("-").pop()})</span></td>
-                    <td><span className="badge-dot" style={{ background: SHELTER_COLOR[a.shelterId], marginRight: 6 }} />{a.shelterName}{a.shelterAtRisk && <span className="suggest-tag danger">at risk</span>}</td>
+                    <td><span className="badge-dot" style={{ background: SHELTER_COLOR[a.shelterId], marginRight: 6 }} />{a.shelterName}{a.shelterAtRisk && <span className="suggest-tag danger">at risk</span>}{TIER_TAG[a.tier] && <span className="suggest-tag">{TIER_TAG[a.tier]}</span>}</td>
                     <td className="mono">{a.people}</td>
                     <td className="mono">{a.durationMin} min</td>
                     <td className="mono">{a.distanceKm} km</td>

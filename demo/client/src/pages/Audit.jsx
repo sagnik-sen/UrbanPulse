@@ -27,6 +27,8 @@ const ACTIONS = {
   rescue_cancelled: { label: "Rescue cancelled", tone: "neutral" },
   boat_registered: { label: "Boat registered", tone: "info" },
   boat_updated: { label: "Boat updated", tone: "neutral" },
+  vulnerable_registered: { label: "Vulnerable resident registered", tone: "neutral" },
+  vulnerable_cancelled: { label: "Vulnerable resident cancelled", tone: "neutral" },
 };
 
 // who acts when no staff member is signed in
@@ -60,6 +62,8 @@ function describe(e) {
     case "rescue_cancelled": return `${d.zone} request for ${d.people} people${d.boat ? `, ${d.boat} turned back` : ""}`;
     case "boat_registered": return `${d.boat} (${d.owner}, ${d.capacity} seats) registered`;
     case "boat_updated": return `${d.boat}: ${d.from} → ${d.to}`;
+    case "vulnerable_registered": return `${d.zoneId}: ${d.category}, ${d.count} ${d.count === 1 ? "person" : "people"}`;
+    case "vulnerable_cancelled": return `${d.zoneId}: ${d.category}, ${d.count} ${d.count === 1 ? "person" : "people"} (cancelled by the resident)`;
     default: return JSON.stringify(d);
   }
 }

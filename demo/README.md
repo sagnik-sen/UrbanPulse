@@ -128,6 +128,15 @@ Assumptions for the matching and the 6-hour dispatch experiment (boat speed 8 km
 cd demo/server && node experiments/rescue.js
 ```
 
+### Vulnerable residents first
+
+A resident can register that someone at home needs help to evacuate (elderly, difficulty walking or using stairs, needs medical support, or an infant), with a head count of 1 to 10. The planner then gives those people first claim on suitable shelter beds.
+
+- **Privacy:** the server stores only the zone, the kind of help and the count, under a random id that the resident keeps to cancel (`POST /api/vulnerable`, `DELETE /api/vulnerable/:id`). No names, phone numbers, addresses or coordinates are stored. Staff see per-zone totals only (`GET /api/vulnerable`). Each registration and cancellation is audited without the id. Registrations sit in one settings row, which suits a demo, not a city-scale registry.
+- **Planning:** when a selected zone has registrations, the proposed plan places people in three tiers, each on the beds the earlier tiers left: mobility and medical needs in accessible shelters only, then elderly and infants in any shelter, then everyone else (`planWithPriority` in `server/planner.js`). The Planner shows the tiers. With no registrations the plan is unchanged.
+- **Assumptions:** which shelters are accessible is illustrative (`accessible` in `server/simulator.js`), not surveyed. A person with a mobility or medical need who finds no free accessible bed stays unassigned; the planner does not fall back to a shelter they cannot use.
+- **Evaluation:** `node experiments/priority.js` compares this with the single-stage plan on the same 1,600 scenarios, assuming 8% of evacuating residents are vulnerable (an assumption, not a measurement). See `experiments/results/priority.md`.
+
 ## Blockchain audit anchoring
 
 Audit entries are hashed into a Merkle tree in batches, and only the root goes on-chain to the

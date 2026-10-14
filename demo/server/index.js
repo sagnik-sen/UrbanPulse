@@ -5,7 +5,8 @@ const { forecast, stepsToBreach } = require("./forecast");
 const { planEvacuation, distanceKm } = require("./evacuation");
 const { forecastRisk, snapshotRisk } = require("./risk");
 const { routeExposure } = require("./evacuation");
-const { planGroups } = require("./planner");
+const { planGroups, planWithPriority } = require("./planner");
+const { validate: validateVulnerable, summarize: summarizeVulnerable } = require("./vulnerable");
 const fs = require("node:fs");
 const path = require("node:path");
 const { openDb } = require("./db");
@@ -713,8 +714,13 @@ function buildEvacuationPlans({ zoneIds, peoplePerZone }) {
   const candidatesFor = (o, sh) => ROUTE_SET.routes[`${o}|${sh}`];
   const fc = forecastRisk(zones, thresholds.danger, SIM_MIN_PER_TICK);
   const common = { groups, shelters: SHELTERS, candidatesFor, reserved };
-  const proposed = planGroups({ ...common, risk: fc, method: "optimal" });
+  // registered vulnerable residents in the selected zones go first; without any, the plan is unchanged
+  const vulnerableByZone = summarizeVulnerable(getVulnerable());
+  const priorityPlan = zoneIds.some((id) => vulnerableByZone[id]?.total > 0) ? planWithPriority({ ...common, risk: fc, vulnerableByZone }) : null;
+  const proposed = priorityPlan ?? planGroups({ ...common, risk: fc, method: "optimal" });
   const conventional = planGroups({ ...common, risk: snapshotRisk(zones), method: "greedy", order: groups.map((_, i) => i) });
+  const proposedSummary = summarizePlan(proposed, zones, groups, fc);
+  proposedSummary.assignments.forEach((a, i) => { a.tier = proposed.assignments[i].tier ?? "general"; });
 
   return {
     generatedAt: Date.now(),
@@ -723,10 +729,43 @@ function buildEvacuationPlans({ zoneIds, peoplePerZone }) {
     suggestedZoneIds: suggestedZones(zones),
     freeBeds: SHELTERS.map((s) => ({ id: s.id, name: s.name, free: Math.max(0, s.capacity - s.occupancy - (reserved[s.id] || 0)), capacity: s.capacity })),
     // both plans are judged by the same live forecast, so the comparison is like-for-like
-    proposed: summarizePlan(proposed, zones, groups, fc),
+    proposed: proposedSummary,
+    priority: priorityPlan ? { byTier: priorityPlan.tiers } : null,
     conventional: summarizePlan(conventional, zones, groups, fc),
   };
 }
+
+// ---- Vulnerable residents -------------------------------------------------------
+// A resident registers that someone at home needs help to evacuate. Only zone, kind of help and a
+// head count are stored, under a random id the resident keeps to cancel later. Staff see per-zone
+// totals only. The whole list lives in one settings row and is rewritten on each change: fine for
+// a demo, not for a city-scale registry.
+const getVulnerable = () => db.getSetting("vulnerableRegistrations", []);
+
+app.post("/api/vulnerable", (req, res) => {
+  const checked = validateVulnerable(req.body);
+  if (checked.error) return res.status(400).json({ error: checked.error });
+  const { zoneId, category, count } = checked.value;
+  if (!LOCATIONS.some((l) => l.id === zoneId)) return res.status(400).json({ error: "Choose an area" });
+  const id = randomUUID();
+  db.setSetting("vulnerableRegistrations", [...getVulnerable(), { id, zoneId, category, count, ts: Date.now() }]);
+  audit(null, "vulnerable_registered", { zoneId, category, count });
+  res.json({ id });
+});
+
+app.delete("/api/vulnerable/:id", (req, res) => {
+  const all = getVulnerable();
+  const gone = all.find((r) => r.id === req.params.id);
+  if (gone) {
+    db.setSetting("vulnerableRegistrations", all.filter((r) => r.id !== gone.id));
+    audit(null, "vulnerable_cancelled", { zoneId: gone.zoneId, category: gone.category, count: gone.count });
+  }
+  res.status(204).end();
+});
+
+app.get("/api/vulnerable", requireRole(...STAFF), (req, res) => {
+  res.json(summarizeVulnerable(getVulnerable()));
+});
 
 app.post("/api/evacuation-plan", requireRole(...STAFF), (req, res) => {
   const request = parsePlanRequest(req.body, currentSnapshot());
@@ -814,7 +853,7 @@ app.post("/api/reservoirs/release", requireRole(...RESPONDERS), (req, res) => {
   res.json({ ok: true, alerts: reservoir.downstream.length });
 });
 
-const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared", "sensor_status", "reservoir_release", "rescue_requested", "rescue_assigned", "rescue_completed", "rescue_cancelled", "boat_registered", "boat_updated"]);
+const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared", "sensor_status", "reservoir_release", "rescue_requested", "rescue_assigned", "rescue_completed", "rescue_cancelled", "boat_registered", "boat_updated", "vulnerable_registered", "vulnerable_cancelled"]);
 
 app.get("/api/audit", requireRole("admin"), (req, res) => {
   const action = AUDIT_ACTIONS.has(req.query.action) ? req.query.action : undefined;

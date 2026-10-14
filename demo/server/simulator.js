@@ -10,13 +10,15 @@ const ZONE_DEFS = [
   { id: "mylapore", name: "Mylapore", lat: 13.0339, lng: 80.2619, base: 32, amplitude: 17, phase: 14, population: 170000 },
 ];
 
+// accessible: ILLUSTRATIVE, not surveyed. Step-free entrance and medical support assumed for these
+// shelters only; the priority experiment and the planner's accessible tier depend on it.
 const SHELTER_DEFS = [
-  { id: "s1", name: "Corporation School, Velachery", zoneId: "velachery", lat: 12.9790, lng: 80.2180, capacity: 400 },
-  { id: "s2", name: "Community Hall, Adyar", zoneId: "adyar", lat: 13.0067, lng: 80.2520, capacity: 300 },
-  { id: "s3", name: "Govt. Hr. Sec. School, Sholinganallur", zoneId: "omr", lat: 12.9050, lng: 80.2330, capacity: 500 },
-  { id: "s4", name: "Kalyana Mandapam, T Nagar", zoneId: "tnagar", lat: 13.0380, lng: 80.2290, capacity: 350 },
-  { id: "s5", name: "Relief Centre, Mylapore", zoneId: "mylapore", lat: 13.0300, lng: 80.2680, capacity: 250 },
-  { id: "s6", name: "Marriage Hall, Medavakkam", zoneId: "pallikaranai", lat: 12.9200, lng: 80.1920, capacity: 300 },
+  { id: "s1", name: "Corporation School, Velachery", zoneId: "velachery", lat: 12.9790, lng: 80.2180, capacity: 400, accessible: true },
+  { id: "s2", name: "Community Hall, Adyar", zoneId: "adyar", lat: 13.0067, lng: 80.2520, capacity: 300, accessible: false },
+  { id: "s3", name: "Govt. Hr. Sec. School, Sholinganallur", zoneId: "omr", lat: 12.9050, lng: 80.2330, capacity: 500, accessible: true },
+  { id: "s4", name: "Kalyana Mandapam, T Nagar", zoneId: "tnagar", lat: 13.0380, lng: 80.2290, capacity: 350, accessible: false },
+  { id: "s5", name: "Relief Centre, Mylapore", zoneId: "mylapore", lat: 13.0300, lng: 80.2680, capacity: 250, accessible: true },
+  { id: "s6", name: "Marriage Hall, Medavakkam", zoneId: "pallikaranai", lat: 12.9200, lng: 80.1920, capacity: 300, accessible: false },
 ];
 
 const RAIN_BURST_CHANCE = 0.008; // per zone per tick
