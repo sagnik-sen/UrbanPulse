@@ -116,6 +116,7 @@ new entries; admins can also anchor immediately.
 - Contract address, RPC and explorer: `server/chain/deployment.json`
 - Signing key: `SHARDEUM_PRIVATE_KEY` in `server/.env` (git-ignored). Without it the app still runs, entries stay "pending", and verification still works read-only
 - Change the contract: edit the `.sol`, then `node chain/compile.js` and `node chain/deploy.js` (deploying starts a fresh, empty ledger)
+- Benchmark: `node chain/bench.js --anchors 20` measures anchor latency, gas and cost on Shardeum. It deploys its own throwaway `AuditAnchor`, so the audit ledger is untouched, and costs roughly deploy + anchors × ~90 test SHM. Results go to `server/experiments/results/chain-bench.md`; add `--eth-gwei`/`--eth-usd` and `--polygon-gwei`/`--pol-usd` for Ethereum and Polygon estimates
 
 **Second agency (Water Resources Department).** The Reservoir Desk's releases are signed by a
 separate wallet, `SHARDEUM_WRD_PRIVATE_KEY` in `server/.env`, so the ledger shows two independent

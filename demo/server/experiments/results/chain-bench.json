@@ -1,0 +1,325 @@
+{
+  "generatedAt": "2026-10-14T19:46:00.614Z",
+  "network": "Shardeum Mezame testnet",
+  "chainId": 8119,
+  "dryRun": false,
+  "bench": {
+    "address": "0xcbb98f30d5b49932E0A75a21626dDa618C93aE0d",
+    "deployTx": "0xc20196e64c22348850e9578ad1458ecbea6faf42f288bd4028649ba04615d596",
+    "deployGas": 582362,
+    "deployCostShm": 670.9237010707062
+  },
+  "anchors": [
+    {
+      "index": 1,
+      "count": 1,
+      "latencyMs": 2510,
+      "gasUsed": 93146,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 107.31101799212861,
+      "block": 8230200,
+      "hash": "0x72962dd079039c43c98bd29aa70a7bb0484edbd127bf5ee60dc1347362dbec93",
+      "error": null
+    },
+    {
+      "index": 2,
+      "count": 10,
+      "latencyMs": 7961,
+      "gasUsed": 76046,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.61056485763652,
+      "block": 8230201,
+      "hash": "0x661d15dd5922870c96f7b08a7835c85c0ae2d3d598fa61bcb7a30c98ce2c75b8",
+      "error": null
+    },
+    {
+      "index": 3,
+      "count": 100,
+      "latencyMs": 2343,
+      "gasUsed": 76046,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.61056485763652,
+      "block": 8230202,
+      "hash": "0x8dedb9071c502bb76ff166c5607d008701f988b11bd14ec30c039b138f21fe56",
+      "error": null
+    },
+    {
+      "index": 4,
+      "count": 500,
+      "latencyMs": 4742,
+      "gasUsed": 76058,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.62438973702916,
+      "block": 8230203,
+      "hash": "0xfdc931decc8df2b54814eb8c6898c8cedff590d202d6aea053e638e5fa7d3bc2",
+      "error": null
+    },
+    {
+      "index": 5,
+      "count": 1,
+      "latencyMs": 7932,
+      "gasUsed": 76046,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.61056485763652,
+      "block": 8230204,
+      "hash": "0x65b98805e1598a60ba815c098aa75f5842119055315a5183045735ae15724abb",
+      "error": null
+    },
+    {
+      "index": 6,
+      "count": 10,
+      "latencyMs": 3101,
+      "gasUsed": 76046,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.61056485763652,
+      "block": 8230205,
+      "hash": "0x7409935a2aa5c97e0b68080ba330183323d656a117054a898686e949f4609940",
+      "error": null
+    },
+    {
+      "index": 7,
+      "count": 100,
+      "latencyMs": 4710,
+      "gasUsed": 76046,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.61056485763652,
+      "block": 8230206,
+      "hash": "0x2fb5eebecd62f23a5bdc5d26b1a356e689de4b6745e70b71345f53f3ff0ba8d6",
+      "error": null
+    },
+    {
+      "index": 8,
+      "count": 500,
+      "latencyMs": 7911,
+      "gasUsed": 76058,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.62438973702916,
+      "block": 8230207,
+      "hash": "0x8ac4b10dc636c0956b6f925eee5054eb08870fb7635a231f1d4f10d3a6e4d2eb",
+      "error": null
+    },
+    {
+      "index": 9,
+      "count": 1,
+      "latencyMs": 2303,
+      "gasUsed": 76046,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.61056485763652,
+      "block": 8230208,
+      "hash": "0xa9a7c80841fc7c6c16efb1a815456ffc0298a40afea2dbd61294350b41ea8bc1",
+      "error": null
+    },
+    {
+      "index": 10,
+      "count": 10,
+      "latencyMs": 4742,
+      "gasUsed": 76046,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.61056485763652,
+      "block": 8230209,
+      "hash": "0x8101cd8c2452e7012ae6baf9470fb51f524bf83b252339d6a03490c36fecfd19",
+      "error": null
+    },
+    {
+      "index": 11,
+      "count": 100,
+      "latencyMs": 7921,
+      "gasUsed": 76046,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.61056485763652,
+      "block": 8230210,
+      "hash": "0x063dddad6aa78ef909d3f8b80a4d8d8020c1e0789871cbbf60f62acda7c576b2",
+      "error": null
+    },
+    {
+      "index": 12,
+      "count": 500,
+      "latencyMs": 2431,
+      "gasUsed": 76058,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.62438973702916,
+      "block": 8230211,
+      "hash": "0x1b225aab4c5a954562fb99f08255572f623d6137fe18f7bf08a0f4a3e870f333",
+      "error": null
+    },
+    {
+      "index": 13,
+      "count": 1,
+      "latencyMs": 7957,
+      "gasUsed": 76046,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.61056485763652,
+      "block": 8230212,
+      "hash": "0x803ba613bad440123464447d1238977bb98548246ee9473411d097ff1bc2b9dc",
+      "error": null
+    },
+    {
+      "index": 14,
+      "count": 10,
+      "latencyMs": 2325,
+      "gasUsed": 76046,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.61056485763652,
+      "block": 8230213,
+      "hash": "0x0e05d4b6b0f507cf6ec29d6a199a06a6b3e905c4fa42c1b8be14f2f64f056738",
+      "error": null
+    },
+    {
+      "index": 15,
+      "count": 100,
+      "latencyMs": 4739,
+      "gasUsed": 76046,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.61056485763652,
+      "block": 8230214,
+      "hash": "0x578938aea660f875b8652c8c5d65e72c42188ff664751787129f8216dffd317a",
+      "error": null
+    },
+    {
+      "index": 16,
+      "count": 500,
+      "latencyMs": 4822,
+      "gasUsed": 76058,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.62438973702916,
+      "block": 8230215,
+      "hash": "0x06cee9bffe7817f028e83063ab30f45782638b2bb6e885e04022b52646a901bc",
+      "error": null
+    },
+    {
+      "index": 17,
+      "count": 1,
+      "latencyMs": 8091,
+      "gasUsed": 76046,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.61056485763652,
+      "block": 8230216,
+      "hash": "0x9473d1402e27575800f5a8658616cbd1a8d3bb09335efa1854ef7cf870901669",
+      "error": null
+    },
+    {
+      "index": 18,
+      "count": 10,
+      "latencyMs": 2489,
+      "gasUsed": 76046,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.61056485763652,
+      "block": 8230217,
+      "hash": "0x5e93a30bfcacdf4afd1b1e7afd26334c6426c64a2f40531fa583db451b1ccabf",
+      "error": null
+    },
+    {
+      "index": 19,
+      "count": 100,
+      "latencyMs": 4865,
+      "gasUsed": 76034,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.5967399782439,
+      "block": 8230218,
+      "hash": "0x0316da271deb2aaaedbe1c1faa916df66170c8cdf0d990eec2c1b8238ee50510",
+      "error": null
+    },
+    {
+      "index": 20,
+      "count": 500,
+      "latencyMs": 4935,
+      "gasUsed": 76058,
+      "gasPriceWei": "1152073282718835",
+      "costShm": 87.62438973702916,
+      "block": 8230219,
+      "hash": "0xdc1cb6c10edec2c11e7641a9baa443078e0875a423b42e87a54cb1e3f7c81ba5",
+      "error": null
+    }
+  ],
+  "prices": {
+    "ethGwei": 1,
+    "ethUsd": 2470,
+    "polGwei": 330,
+    "polUsd": 0.1
+  },
+  "summary": {
+    "attempted": 20,
+    "succeeded": 20,
+    "latency": {
+      "min": 2.303,
+      "median": 4.742,
+      "p90": 7.9574,
+      "max": 8.091
+    },
+    "meanGas": 76903.4,
+    "meanCostShm": 88.59835249023965,
+    "meanGasPriceWei": 1152073282718835.5,
+    "byCount": [
+      {
+        "count": 1,
+        "n": 5,
+        "meanGas": 79466
+      },
+      {
+        "count": 10,
+        "n": 5,
+        "meanGas": 76046
+      },
+      {
+        "count": 100,
+        "n": 5,
+        "meanGas": 76043.6
+      },
+      {
+        "count": 500,
+        "n": 5,
+        "meanGas": 76058
+      }
+    ]
+  },
+  "comparison": [
+    {
+      "entries": 1000,
+      "strategy": "Per-entry anchoring",
+      "txs": 1000,
+      "shm": 88598.35249023969,
+      "eth": 189.95139799999998,
+      "pol": 2.5378121999999994
+    },
+    {
+      "entries": 1000,
+      "strategy": "Batched every 5 min",
+      "txs": 288,
+      "shm": 25516.32551718903,
+      "eth": 54.706002624,
+      "pol": 0.7308899135999999
+    },
+    {
+      "entries": 10000,
+      "strategy": "Per-entry anchoring",
+      "txs": 10000,
+      "shm": 885983.524902397,
+      "eth": 1899.51398,
+      "pol": 25.378121999999998
+    },
+    {
+      "entries": 10000,
+      "strategy": "Batched every 5 min",
+      "txs": 288,
+      "shm": 25516.32551718903,
+      "eth": 54.706002624,
+      "pol": 0.7308899135999999
+    },
+    {
+      "entries": 100000,
+      "strategy": "Per-entry anchoring",
+      "txs": 100000,
+      "shm": 8859835.249023968,
+      "eth": 18995.1398,
+      "pol": 253.78121999999996
+    },
+    {
+      "entries": 100000,
+      "strategy": "Batched every 5 min",
+      "txs": 288,
+      "shm": 25516.32551718903,
+      "eth": 54.706002624,
+      "pol": 0.7308899135999999
+    }
+  ]
+}
