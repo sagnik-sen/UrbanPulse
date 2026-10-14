@@ -97,9 +97,6 @@ function DemoData() {
   return (
     <div className="panel">
       <div className="panel-head"><h2>Demo Data</h2><span className="muted small">Saved in SQLite</span></div>
-      <p className="muted small" style={{ marginBottom: 14 }}>
-        Everything below survives server restarts. Clear it before a presentation to start from a clean slate.
-      </p>
       <div className="data-counts">
         <div><span className="route-num">{reports.length}</span> reports</div>
         <div><span className="route-num">{incidents.length}</span> incidents</div>
