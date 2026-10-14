@@ -1,0 +1,27 @@
+{
+  "note": "Documented flooding at day resolution only; no hour-level public timeline was found. Times are IST.",
+  "events": {
+    "michaung-2023": {
+      "floodDay": "2023-12-04",
+      "zones": ["velachery", "pallikaranai"],
+      "facts": [
+        { "text": "Torrential rain from the weekend of 2-3 December continued until Tuesday 5 December.", "source": "https://www.dtnext.in/amp/story/edit/editorial-let-it-go-let-it-flow-752557" },
+        { "text": "Velachery bore the brunt of the deluge on Monday 4 December; Pallikaranai among the affected suburbs.", "source": "https://citizenmatters.in/devastation-storm-chennai-cyclone-michaung-monsoon-flooding-36477" },
+        { "text": "Velachery, Pallikaranai and surroundings still heavily waterlogged on 5 December; waterlogging persisted on 7 December.", "source": "https://citizenmatters.in/devastation-storm-chennai-cyclone-michaung-monsoon-flooding-36477" },
+        { "text": "Sphere India situation report 1 on Cyclone Michaung, 4 December 2023.", "source": "https://www.sphereindia.org.in/sites/default/files/2023-12/SitRep-1_CycloneMichaung_04-12-23.pdf" }
+      ]
+    },
+    "chennai-2015": {
+      "floodDay": "2015-12-02",
+      "zones": ["adyar", "tnagar", "mylapore"],
+      "release": { "reservoir": "chembarambakkam", "cusecs": 29000, "time": "2015-12-01T20:00", "officialWarning": "2015-12-02T00:00" },
+      "facts": [
+        { "text": "Chennai city received more than 30 cm of rainfall on 1 December 2015.", "source": "https://kygcms.tn.gov.in/cms_migrated/document/press_release/pn131215_188.pdf" },
+        { "text": "Corporation officials say they were informed of the 29,000 cusecs release at about 8 pm on 1 December; a petitioner told the High Court the flood warning was issued only at midnight.", "source": "https://thewire.in/government/as-chennai-flooded-officials-fiddled" },
+        { "text": "The city flooded on 2 December after the release of 29,000 cusecs from Chembarambakkam into the Adyar.", "source": "https://www.deccanherald.com/national/south/memories-of-2015-floods-return-to-haunt-chennai-as-excess-water-from-chembarambakkam-released-919868.html" },
+        { "text": "CAG performance audit of flood management and response in Chennai (Report No. 4 of 2017).", "source": "https://cag.gov.in/uploads/download_audit_report/2016/Chapter_1_Introduction_of_Report_No_4_of_2017_-_Performance_Audit_of_Flood_Management_and_Response_in_Che.pdf" }
+      ]
+    },
+    "control-nov-2023": { "floodDay": null, "zones": [], "facts": [ { "text": "Control window inside the 2023 northeast monsoon, before the Michaung build-up; treated as having no major flooding (assumption).", "source": null } ] }
+  }
+}

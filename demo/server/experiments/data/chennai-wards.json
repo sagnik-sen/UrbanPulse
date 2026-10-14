@@ -1,0 +1,1407 @@
+{
+ "source": "Chennai Wards.geojson, DataMeet Municipal_Spatial_Data (data from Transparent Chennai), https://github.com/datameet/Municipal_Spatial_Data/tree/master/Chennai",
+ "license": "CC BY-SA 2.5 India (derived centroids and areas)",
+ "note": "Centroid of the largest polygon per ward; area summed over polygons. Feature numbered 0 (St. Thomas Mount cantonment, not a GCC ward) dropped.",
+ "wards": [
+  {
+   "ward": 1,
+   "zone": "Thiruvottiyur",
+   "lat": 13.22713,
+   "lng": 80.32413,
+   "km2": 1.83
+  },
+  {
+   "ward": 2,
+   "zone": "Thiruvottiyur",
+   "lat": 13.21407,
+   "lng": 80.31755,
+   "km2": 2.83
+  },
+  {
+   "ward": 3,
+   "zone": "Thiruvottiyur",
+   "lat": 13.19828,
+   "lng": 80.31358,
+   "km2": 2.956
+  },
+  {
+   "ward": 4,
+   "zone": "Thiruvottiyur",
+   "lat": 13.18655,
+   "lng": 80.30448,
+   "km2": 1.651
+  },
+  {
+   "ward": 5,
+   "zone": "Thiruvottiyur",
+   "lat": 13.1776,
+   "lng": 80.31036,
+   "km2": 2.618
+  },
+  {
+   "ward": 6,
+   "zone": "Thiruvottiyur",
+   "lat": 13.17781,
+   "lng": 80.29531,
+   "km2": 1.84
+  },
+  {
+   "ward": 7,
+   "zone": "Thiruvottiyur",
+   "lat": 13.1565,
+   "lng": 80.2831,
+   "km2": 7.736
+  },
+  {
+   "ward": 8,
+   "zone": "Thiruvottiyur",
+   "lat": 13.16621,
+   "lng": 80.30704,
+   "km2": 0.463
+  },
+  {
+   "ward": 9,
+   "zone": "Thiruvottiyur",
+   "lat": 13.16249,
+   "lng": 80.30619,
+   "km2": 0.516
+  },
+  {
+   "ward": 10,
+   "zone": "Thiruvottiyur",
+   "lat": 13.1616,
+   "lng": 80.29971,
+   "km2": 0.467
+  },
+  {
+   "ward": 11,
+   "zone": "Thiruvottiyur",
+   "lat": 13.15542,
+   "lng": 80.30397,
+   "km2": 1.199
+  },
+  {
+   "ward": 12,
+   "zone": "Thiruvottiyur",
+   "lat": 13.15195,
+   "lng": 80.29685,
+   "km2": 0.373
+  },
+  {
+   "ward": 13,
+   "zone": "Thiruvottiyur",
+   "lat": 13.14763,
+   "lng": 80.29398,
+   "km2": 0.438
+  },
+  {
+   "ward": 14,
+   "zone": "Thiruvottiyur",
+   "lat": 13.1468,
+   "lng": 80.30188,
+   "km2": 0.796
+  },
+  {
+   "ward": 15,
+   "zone": "Manali",
+   "lat": 13.21217,
+   "lng": 80.28738,
+   "km2": 8.69
+  },
+  {
+   "ward": 16,
+   "zone": "Manali",
+   "lat": 13.19455,
+   "lng": 80.27761,
+   "km2": 9.985
+  },
+  {
+   "ward": 17,
+   "zone": "Manali",
+   "lat": 13.18509,
+   "lng": 80.23424,
+   "km2": 6.645
+  },
+  {
+   "ward": 18,
+   "zone": "Manali",
+   "lat": 13.17898,
+   "lng": 80.26713,
+   "km2": 8.048
+  },
+  {
+   "ward": 19,
+   "zone": "Manali",
+   "lat": 13.17283,
+   "lng": 80.24039,
+   "km2": 4.117
+  },
+  {
+   "ward": 20,
+   "zone": "Manali",
+   "lat": 13.16876,
+   "lng": 80.25452,
+   "km2": 0.541
+  },
+  {
+   "ward": 21,
+   "zone": "Manali",
+   "lat": 13.16488,
+   "lng": 80.27176,
+   "km2": 1.954
+  },
+  {
+   "ward": 22,
+   "zone": "Madhavaram",
+   "lat": 13.16886,
+   "lng": 80.20493,
+   "km2": 3.993
+  },
+  {
+   "ward": 23,
+   "zone": "Madhavaram",
+   "lat": 13.16,
+   "lng": 80.20809,
+   "km2": 2.914
+  },
+  {
+   "ward": 24,
+   "zone": "Madhavaram",
+   "lat": 13.14175,
+   "lng": 80.19121,
+   "km2": 4.71
+  },
+  {
+   "ward": 25,
+   "zone": "Madhavaram",
+   "lat": 13.14928,
+   "lng": 80.20629,
+   "km2": 2.539
+  },
+  {
+   "ward": 26,
+   "zone": "Madhavaram",
+   "lat": 13.14445,
+   "lng": 80.21767,
+   "km2": 4.809
+  },
+  {
+   "ward": 27,
+   "zone": "Madhavaram",
+   "lat": 13.15876,
+   "lng": 80.23515,
+   "km2": 3.197
+  },
+  {
+   "ward": 28,
+   "zone": "Madhavaram",
+   "lat": 13.15553,
+   "lng": 80.24928,
+   "km2": 3.182
+  },
+  {
+   "ward": 29,
+   "zone": "Madhavaram",
+   "lat": 13.15432,
+   "lng": 80.26215,
+   "km2": 2.157
+  },
+  {
+   "ward": 30,
+   "zone": "Madhavaram",
+   "lat": 13.14722,
+   "lng": 80.23455,
+   "km2": 0.884
+  },
+  {
+   "ward": 31,
+   "zone": "Madhavaram",
+   "lat": 13.1387,
+   "lng": 80.23457,
+   "km2": 1.594
+  },
+  {
+   "ward": 32,
+   "zone": "Madhavaram",
+   "lat": 13.13185,
+   "lng": 80.20699,
+   "km2": 0.783
+  },
+  {
+   "ward": 33,
+   "zone": "Madhavaram",
+   "lat": 13.13096,
+   "lng": 80.231,
+   "km2": 2.584
+  },
+  {
+   "ward": 34,
+   "zone": "Tondiarpet",
+   "lat": 13.14178,
+   "lng": 80.24976,
+   "km2": 2.371
+  },
+  {
+   "ward": 35,
+   "zone": "Tondiarpet",
+   "lat": 13.13179,
+   "lng": 80.24877,
+   "km2": 1.75
+  },
+  {
+   "ward": 36,
+   "zone": "Tondiarpet",
+   "lat": 13.12467,
+   "lng": 80.25444,
+   "km2": 1.517
+  },
+  {
+   "ward": 37,
+   "zone": "Tondiarpet",
+   "lat": 13.1323,
+   "lng": 80.26648,
+   "km2": 4.326
+  },
+  {
+   "ward": 38,
+   "zone": "Tondiarpet",
+   "lat": 13.13467,
+   "lng": 80.28171,
+   "km2": 2.482
+  },
+  {
+   "ward": 39,
+   "zone": "Tondiarpet",
+   "lat": 13.13943,
+   "lng": 80.29429,
+   "km2": 1.031
+  },
+  {
+   "ward": 40,
+   "zone": "Tondiarpet",
+   "lat": 13.13345,
+   "lng": 80.2892,
+   "km2": 0.842
+  },
+  {
+   "ward": 41,
+   "zone": "Tondiarpet",
+   "lat": 13.12475,
+   "lng": 80.2757,
+   "km2": 0.824
+  },
+  {
+   "ward": 42,
+   "zone": "Tondiarpet",
+   "lat": 13.12296,
+   "lng": 80.28508,
+   "km2": 0.578
+  },
+  {
+   "ward": 43,
+   "zone": "Tondiarpet",
+   "lat": 13.12626,
+   "lng": 80.29404,
+   "km2": 0.947
+  },
+  {
+   "ward": 44,
+   "zone": "Tondiarpet",
+   "lat": 13.11765,
+   "lng": 80.248,
+   "km2": 0.66
+  },
+  {
+   "ward": 45,
+   "zone": "Tondiarpet",
+   "lat": 13.11329,
+   "lng": 80.25808,
+   "km2": 1.115
+  },
+  {
+   "ward": 46,
+   "zone": "Tondiarpet",
+   "lat": 13.11476,
+   "lng": 80.2671,
+   "km2": 1.012
+  },
+  {
+   "ward": 47,
+   "zone": "Tondiarpet",
+   "lat": 13.1159,
+   "lng": 80.27479,
+   "km2": 0.749
+  },
+  {
+   "ward": 48,
+   "zone": "Tondiarpet",
+   "lat": 13.11503,
+   "lng": 80.28244,
+   "km2": 0.476
+  },
+  {
+   "ward": 49,
+   "zone": "Royapuram",
+   "lat": 13.11799,
+   "lng": 80.28968,
+   "km2": 0.765
+  },
+  {
+   "ward": 50,
+   "zone": "Royapuram",
+   "lat": 13.11345,
+   "lng": 80.29665,
+   "km2": 1.527
+  },
+  {
+   "ward": 51,
+   "zone": "Royapuram",
+   "lat": 13.11208,
+   "lng": 80.28554,
+   "km2": 0.289
+  },
+  {
+   "ward": 52,
+   "zone": "Royapuram",
+   "lat": 13.10677,
+   "lng": 80.28898,
+   "km2": 1.09
+  },
+  {
+   "ward": 53,
+   "zone": "Royapuram",
+   "lat": 13.10661,
+   "lng": 80.27529,
+   "km2": 1.361
+  },
+  {
+   "ward": 54,
+   "zone": "Royapuram",
+   "lat": 13.09932,
+   "lng": 80.27752,
+   "km2": 0.547
+  },
+  {
+   "ward": 55,
+   "zone": "Royapuram",
+   "lat": 13.09976,
+   "lng": 80.28253,
+   "km2": 0.574
+  },
+  {
+   "ward": 56,
+   "zone": "Royapuram",
+   "lat": 13.10045,
+   "lng": 80.28713,
+   "km2": 0.565
+  },
+  {
+   "ward": 57,
+   "zone": "Royapuram",
+   "lat": 13.09222,
+   "lng": 80.28007,
+   "km2": 0.824
+  },
+  {
+   "ward": 58,
+   "zone": "Royapuram",
+   "lat": 13.08502,
+   "lng": 80.26508,
+   "km2": 2.42
+  },
+  {
+   "ward": 59,
+   "zone": "Royapuram",
+   "lat": 13.07876,
+   "lng": 80.27703,
+   "km2": 2.177
+  },
+  {
+   "ward": 60,
+   "zone": "Royapuram",
+   "lat": 13.08468,
+   "lng": 80.29016,
+   "km2": 5.756
+  },
+  {
+   "ward": 61,
+   "zone": "Royapuram",
+   "lat": 13.07225,
+   "lng": 80.25883,
+   "km2": 2.246
+  },
+  {
+   "ward": 62,
+   "zone": "Royapuram",
+   "lat": 13.0746,
+   "lng": 80.27014,
+   "km2": 0.637
+  },
+  {
+   "ward": 63,
+   "zone": "Royapuram",
+   "lat": 13.06554,
+   "lng": 80.2669,
+   "km2": 1.18
+  },
+  {
+   "ward": 64,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.12372,
+   "lng": 80.21642,
+   "km2": 2.401
+  },
+  {
+   "ward": 65,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.11851,
+   "lng": 80.20968,
+   "km2": 1.852
+  },
+  {
+   "ward": 66,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.11828,
+   "lng": 80.22717,
+   "km2": 1.656
+  },
+  {
+   "ward": 67,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.11101,
+   "lng": 80.22799,
+   "km2": 0.985
+  },
+  {
+   "ward": 68,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.11851,
+   "lng": 80.23631,
+   "km2": 0.889
+  },
+  {
+   "ward": 69,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.11068,
+   "lng": 80.2409,
+   "km2": 1.739
+  },
+  {
+   "ward": 70,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.10857,
+   "lng": 80.25172,
+   "km2": 1.485
+  },
+  {
+   "ward": 71,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.10206,
+   "lng": 80.2466,
+   "km2": 0.957
+  },
+  {
+   "ward": 72,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.10377,
+   "lng": 80.26661,
+   "km2": 1.134
+  },
+  {
+   "ward": 73,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.10076,
+   "lng": 80.25793,
+   "km2": 0.807
+  },
+  {
+   "ward": 74,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.09271,
+   "lng": 80.24538,
+   "km2": 0.928
+  },
+  {
+   "ward": 75,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.09426,
+   "lng": 80.25211,
+   "km2": 0.338
+  },
+  {
+   "ward": 76,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.09597,
+   "lng": 80.25874,
+   "km2": 0.454
+  },
+  {
+   "ward": 77,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.09544,
+   "lng": 80.26751,
+   "km2": 0.669
+  },
+  {
+   "ward": 78,
+   "zone": "Thiru-Vi-Ka-Nagar",
+   "lat": 13.0915,
+   "lng": 80.26068,
+   "km2": 0.657
+  },
+  {
+   "ward": 79,
+   "zone": "Ambattur",
+   "lat": 13.13314,
+   "lng": 80.15219,
+   "km2": 2.056
+  },
+  {
+   "ward": 80,
+   "zone": "Ambattur",
+   "lat": 13.12969,
+   "lng": 80.15969,
+   "km2": 1.466
+  },
+  {
+   "ward": 81,
+   "zone": "Ambattur",
+   "lat": 13.11914,
+   "lng": 80.15101,
+   "km2": 1.658
+  },
+  {
+   "ward": 82,
+   "zone": "Ambattur",
+   "lat": 13.12674,
+   "lng": 80.17046,
+   "km2": 4.713
+  },
+  {
+   "ward": 83,
+   "zone": "Ambattur",
+   "lat": 13.12119,
+   "lng": 80.18871,
+   "km2": 6.837
+  },
+  {
+   "ward": 84,
+   "zone": "Ambattur",
+   "lat": 13.10684,
+   "lng": 80.17837,
+   "km2": 3.557
+  },
+  {
+   "ward": 85,
+   "zone": "Ambattur",
+   "lat": 13.10677,
+   "lng": 80.15331,
+   "km2": 4.378
+  },
+  {
+   "ward": 86,
+   "zone": "Ambattur",
+   "lat": 13.0935,
+   "lng": 80.16049,
+   "km2": 5.952
+  },
+  {
+   "ward": 87,
+   "zone": "Ambattur",
+   "lat": 13.09515,
+   "lng": 80.18312,
+   "km2": 0.803
+  },
+  {
+   "ward": 88,
+   "zone": "Ambattur",
+   "lat": 13.09716,
+   "lng": 80.19055,
+   "km2": 0.747
+  },
+  {
+   "ward": 89,
+   "zone": "Ambattur",
+   "lat": 13.08999,
+   "lng": 80.1848,
+   "km2": 0.858
+  },
+  {
+   "ward": 90,
+   "zone": "Ambattur",
+   "lat": 13.0853,
+   "lng": 80.19411,
+   "km2": 1.467
+  },
+  {
+   "ward": 91,
+   "zone": "Ambattur",
+   "lat": 13.08256,
+   "lng": 80.17134,
+   "km2": 1.503
+  },
+  {
+   "ward": 92,
+   "zone": "Ambattur",
+   "lat": 13.08278,
+   "lng": 80.17946,
+   "km2": 1.157
+  },
+  {
+   "ward": 93,
+   "zone": "Ambattur",
+   "lat": 13.07852,
+   "lng": 80.18772,
+   "km2": 1.223
+  },
+  {
+   "ward": 94,
+   "zone": "Annanagar",
+   "lat": 13.10933,
+   "lng": 80.2027,
+   "km2": 1.824
+  },
+  {
+   "ward": 95,
+   "zone": "Annanagar",
+   "lat": 13.10059,
+   "lng": 80.20542,
+   "km2": 2.152
+  },
+  {
+   "ward": 96,
+   "zone": "Annanagar",
+   "lat": 13.10281,
+   "lng": 80.22634,
+   "km2": 3.007
+  },
+  {
+   "ward": 97,
+   "zone": "Annanagar",
+   "lat": 13.09482,
+   "lng": 80.22831,
+   "km2": 0.737
+  },
+  {
+   "ward": 98,
+   "zone": "Annanagar",
+   "lat": 13.09099,
+   "lng": 80.23725,
+   "km2": 1.164
+  },
+  {
+   "ward": 99,
+   "zone": "Annanagar",
+   "lat": 13.0875,
+   "lng": 80.20322,
+   "km2": 1.583
+  },
+  {
+   "ward": 100,
+   "zone": "Annanagar",
+   "lat": 13.08724,
+   "lng": 80.21118,
+   "km2": 3.047
+  },
+  {
+   "ward": 101,
+   "zone": "Annanagar",
+   "lat": 13.08603,
+   "lng": 80.2205,
+   "km2": 1.742
+  },
+  {
+   "ward": 102,
+   "zone": "Annanagar",
+   "lat": 13.08315,
+   "lng": 80.22767,
+   "km2": 1.641
+  },
+  {
+   "ward": 103,
+   "zone": "Annanagar",
+   "lat": 13.08143,
+   "lng": 80.24029,
+   "km2": 2.104
+  },
+  {
+   "ward": 104,
+   "zone": "Annanagar",
+   "lat": 13.08228,
+   "lng": 80.25035,
+   "km2": 1.303
+  },
+  {
+   "ward": 105,
+   "zone": "Annanagar",
+   "lat": 13.06998,
+   "lng": 80.21094,
+   "km2": 1.378
+  },
+  {
+   "ward": 106,
+   "zone": "Annanagar",
+   "lat": 13.07116,
+   "lng": 80.22264,
+   "km2": 1.041
+  },
+  {
+   "ward": 107,
+   "zone": "Annanagar",
+   "lat": 13.07256,
+   "lng": 80.23951,
+   "km2": 1.479
+  },
+  {
+   "ward": 108,
+   "zone": "Annanagar",
+   "lat": 13.0634,
+   "lng": 80.21755,
+   "km2": 1.003
+  },
+  {
+   "ward": 109,
+   "zone": "Teynampet",
+   "lat": 13.06328,
+   "lng": 80.22682,
+   "km2": 0.95
+  },
+  {
+   "ward": 110,
+   "zone": "Teynampet",
+   "lat": 13.0614,
+   "lng": 80.23738,
+   "km2": 2.067
+  },
+  {
+   "ward": 111,
+   "zone": "Teynampet",
+   "lat": 13.06092,
+   "lng": 80.2531,
+   "km2": 2.849
+  },
+  {
+   "ward": 112,
+   "zone": "Teynampet",
+   "lat": 13.05695,
+   "lng": 80.22479,
+   "km2": 1.02
+  },
+  {
+   "ward": 113,
+   "zone": "Teynampet",
+   "lat": 13.05443,
+   "lng": 80.24328,
+   "km2": 1.453
+  },
+  {
+   "ward": 114,
+   "zone": "Teynampet",
+   "lat": 13.06251,
+   "lng": 80.28005,
+   "km2": 1.657
+  },
+  {
+   "ward": 115,
+   "zone": "Teynampet",
+   "lat": 13.05601,
+   "lng": 80.26693,
+   "km2": 0.847
+  },
+  {
+   "ward": 116,
+   "zone": "Teynampet",
+   "lat": 13.0548,
+   "lng": 80.27792,
+   "km2": 0.67
+  },
+  {
+   "ward": 117,
+   "zone": "Teynampet",
+   "lat": 13.0441,
+   "lng": 80.24125,
+   "km2": 1.696
+  },
+  {
+   "ward": 118,
+   "zone": "Teynampet",
+   "lat": 13.0458,
+   "lng": 80.25474,
+   "km2": 1.79
+  },
+  {
+   "ward": 119,
+   "zone": "Teynampet",
+   "lat": 13.04697,
+   "lng": 80.26483,
+   "km2": 1.381
+  },
+  {
+   "ward": 120,
+   "zone": "Teynampet",
+   "lat": 13.0495,
+   "lng": 80.27574,
+   "km2": 0.559
+  },
+  {
+   "ward": 121,
+   "zone": "Teynampet",
+   "lat": 13.04394,
+   "lng": 80.27155,
+   "km2": 0.868
+  },
+  {
+   "ward": 122,
+   "zone": "Teynampet",
+   "lat": 13.02898,
+   "lng": 80.24707,
+   "km2": 1.869
+  },
+  {
+   "ward": 123,
+   "zone": "Teynampet",
+   "lat": 13.03322,
+   "lng": 80.25719,
+   "km2": 2.177
+  },
+  {
+   "ward": 124,
+   "zone": "Teynampet",
+   "lat": 13.03437,
+   "lng": 80.26902,
+   "km2": 1.07
+  },
+  {
+   "ward": 125,
+   "zone": "Teynampet",
+   "lat": 13.0361,
+   "lng": 80.27632,
+   "km2": 1.243
+  },
+  {
+   "ward": 126,
+   "zone": "Teynampet",
+   "lat": 13.02665,
+   "lng": 80.26972,
+   "km2": 1.046
+  },
+  {
+   "ward": 127,
+   "zone": "Kodambakkam",
+   "lat": 13.06699,
+   "lng": 80.1989,
+   "km2": 3.749
+  },
+  {
+   "ward": 128,
+   "zone": "Kodambakkam",
+   "lat": 13.04704,
+   "lng": 80.19151,
+   "km2": 1.984
+  },
+  {
+   "ward": 129,
+   "zone": "Kodambakkam",
+   "lat": 13.05352,
+   "lng": 80.20356,
+   "km2": 1.836
+  },
+  {
+   "ward": 130,
+   "zone": "Kodambakkam",
+   "lat": 13.05337,
+   "lng": 80.21255,
+   "km2": 1.176
+  },
+  {
+   "ward": 131,
+   "zone": "Kodambakkam",
+   "lat": 13.04154,
+   "lng": 80.2036,
+   "km2": 1.18
+  },
+  {
+   "ward": 132,
+   "zone": "Kodambakkam",
+   "lat": 13.03874,
+   "lng": 80.21278,
+   "km2": 1.403
+  },
+  {
+   "ward": 133,
+   "zone": "Kodambakkam",
+   "lat": 13.04271,
+   "lng": 80.21824,
+   "km2": 1.021
+  },
+  {
+   "ward": 134,
+   "zone": "Kodambakkam",
+   "lat": 13.04955,
+   "lng": 80.2253,
+   "km2": 1.048
+  },
+  {
+   "ward": 135,
+   "zone": "Kodambakkam",
+   "lat": 13.03971,
+   "lng": 80.22389,
+   "km2": 0.93
+  },
+  {
+   "ward": 136,
+   "zone": "Kodambakkam",
+   "lat": 13.04093,
+   "lng": 80.23487,
+   "km2": 1.875
+  },
+  {
+   "ward": 137,
+   "zone": "Kodambakkam",
+   "lat": 13.03593,
+   "lng": 80.19483,
+   "km2": 1.618
+  },
+  {
+   "ward": 138,
+   "zone": "Kodambakkam",
+   "lat": 13.03184,
+   "lng": 80.20407,
+   "km2": 1.154
+  },
+  {
+   "ward": 139,
+   "zone": "Kodambakkam",
+   "lat": 13.02709,
+   "lng": 80.21389,
+   "km2": 0.701
+  },
+  {
+   "ward": 140,
+   "zone": "Kodambakkam",
+   "lat": 13.03041,
+   "lng": 80.22222,
+   "km2": 0.681
+  },
+  {
+   "ward": 141,
+   "zone": "Kodambakkam",
+   "lat": 13.03188,
+   "lng": 80.23194,
+   "km2": 0.819
+  },
+  {
+   "ward": 142,
+   "zone": "Kodambakkam",
+   "lat": 13.02182,
+   "lng": 80.22049,
+   "km2": 1.135
+  },
+  {
+   "ward": 143,
+   "zone": "Valasaravakkam",
+   "lat": 13.07429,
+   "lng": 80.16795,
+   "km2": 2.597
+  },
+  {
+   "ward": 144,
+   "zone": "Valasaravakkam",
+   "lat": 13.06497,
+   "lng": 80.17621,
+   "km2": 1.118
+  },
+  {
+   "ward": 145,
+   "zone": "Valasaravakkam",
+   "lat": 13.06596,
+   "lng": 80.18579,
+   "km2": 1.805
+  },
+  {
+   "ward": 146,
+   "zone": "Valasaravakkam",
+   "lat": 13.05319,
+   "lng": 80.16391,
+   "km2": 1.294
+  },
+  {
+   "ward": 147,
+   "zone": "Valasaravakkam",
+   "lat": 13.05258,
+   "lng": 80.16992,
+   "km2": 2.406
+  },
+  {
+   "ward": 148,
+   "zone": "Valasaravakkam",
+   "lat": 13.05619,
+   "lng": 80.18279,
+   "km2": 0.919
+  },
+  {
+   "ward": 149,
+   "zone": "Valasaravakkam",
+   "lat": 13.04703,
+   "lng": 80.17866,
+   "km2": 1.6
+  },
+  {
+   "ward": 150,
+   "zone": "Valasaravakkam",
+   "lat": 13.03795,
+   "lng": 80.15295,
+   "km2": 1.035
+  },
+  {
+   "ward": 151,
+   "zone": "Valasaravakkam",
+   "lat": 13.03312,
+   "lng": 80.16672,
+   "km2": 1.472
+  },
+  {
+   "ward": 152,
+   "zone": "Valasaravakkam",
+   "lat": 13.03985,
+   "lng": 80.17946,
+   "km2": 1.357
+  },
+  {
+   "ward": 153,
+   "zone": "Valasaravakkam",
+   "lat": 13.02902,
+   "lng": 80.15602,
+   "km2": 2.26
+  },
+  {
+   "ward": 154,
+   "zone": "Valasaravakkam",
+   "lat": 13.02925,
+   "lng": 80.17596,
+   "km2": 1.024
+  },
+  {
+   "ward": 155,
+   "zone": "Valasaravakkam",
+   "lat": 13.0309,
+   "lng": 80.1842,
+   "km2": 1.54
+  },
+  {
+   "ward": 156,
+   "zone": "Alandur",
+   "lat": 13.02012,
+   "lng": 80.16094,
+   "km2": 3.169
+  },
+  {
+   "ward": 157,
+   "zone": "Alandur",
+   "lat": 13.01193,
+   "lng": 80.17416,
+   "km2": 4.156
+  },
+  {
+   "ward": 158,
+   "zone": "Alandur",
+   "lat": 13.01529,
+   "lng": 80.18843,
+   "km2": 2.037
+  },
+  {
+   "ward": 159,
+   "zone": "Alandur",
+   "lat": 12.9925,
+   "lng": 80.1699,
+   "km2": 3.358
+  },
+  {
+   "ward": 160,
+   "zone": "Alandur",
+   "lat": 13.00434,
+   "lng": 80.20659,
+   "km2": 0.665
+  },
+  {
+   "ward": 161,
+   "zone": "Alandur",
+   "lat": 12.99637,
+   "lng": 80.20281,
+   "km2": 0.745
+  },
+  {
+   "ward": 162,
+   "zone": "Alandur",
+   "lat": 12.99167,
+   "lng": 80.19231,
+   "km2": 1.275
+  },
+  {
+   "ward": 163,
+   "zone": "Alandur",
+   "lat": 12.99041,
+   "lng": 80.20126,
+   "km2": 0.521
+  },
+  {
+   "ward": 164,
+   "zone": "Alandur",
+   "lat": 12.98542,
+   "lng": 80.18767,
+   "km2": 0.621
+  },
+  {
+   "ward": 165,
+   "zone": "Alandur",
+   "lat": 12.98271,
+   "lng": 80.20009,
+   "km2": 1.097
+  },
+  {
+   "ward": 166,
+   "zone": "Alandur",
+   "lat": 12.97833,
+   "lng": 80.17958,
+   "km2": 1.22
+  },
+  {
+   "ward": 167,
+   "zone": "Alandur",
+   "lat": 12.97647,
+   "lng": 80.186,
+   "km2": 1.401
+  },
+  {
+   "ward": 168,
+   "zone": "Perungudi",
+   "lat": 12.97783,
+   "lng": 80.19478,
+   "km2": 0.845
+  },
+  {
+   "ward": 169,
+   "zone": "Perungudi",
+   "lat": 12.97081,
+   "lng": 80.20374,
+   "km2": 2.682
+  },
+  {
+   "ward": 170,
+   "zone": "Adyar",
+   "lat": 13.01721,
+   "lng": 80.2089,
+   "km2": 3.691
+  },
+  {
+   "ward": 171,
+   "zone": "Adyar",
+   "lat": 13.01837,
+   "lng": 80.23253,
+   "km2": 3.817
+  },
+  {
+   "ward": 172,
+   "zone": "Adyar",
+   "lat": 13.01208,
+   "lng": 80.24433,
+   "km2": 2.54
+  },
+  {
+   "ward": 173,
+   "zone": "Adyar",
+   "lat": 13.01812,
+   "lng": 80.26441,
+   "km2": 3.959
+  },
+  {
+   "ward": 174,
+   "zone": "Adyar",
+   "lat": 12.99833,
+   "lng": 80.22685,
+   "km2": 8.34
+  },
+  {
+   "ward": 175,
+   "zone": "Adyar",
+   "lat": 13.00364,
+   "lng": 80.25266,
+   "km2": 2.329
+  },
+  {
+   "ward": 176,
+   "zone": "Adyar",
+   "lat": 13.00411,
+   "lng": 80.26555,
+   "km2": 2.994
+  },
+  {
+   "ward": 177,
+   "zone": "Adyar",
+   "lat": 12.98663,
+   "lng": 80.21105,
+   "km2": 2.439
+  },
+  {
+   "ward": 178,
+   "zone": "Adyar",
+   "lat": 12.97742,
+   "lng": 80.2171,
+   "km2": 1.475
+  },
+  {
+   "ward": 179,
+   "zone": "Adyar",
+   "lat": 12.97792,
+   "lng": 80.22608,
+   "km2": 2.369
+  },
+  {
+   "ward": 180,
+   "zone": "Adyar",
+   "lat": 12.98639,
+   "lng": 80.24591,
+   "km2": 2.632
+  },
+  {
+   "ward": 181,
+   "zone": "Adyar",
+   "lat": 12.99094,
+   "lng": 80.26349,
+   "km2": 1.841
+  },
+  {
+   "ward": 182,
+   "zone": "Adyar",
+   "lat": 12.98023,
+   "lng": 80.26063,
+   "km2": 1.797
+  },
+  {
+   "ward": 183,
+   "zone": "Perungudi",
+   "lat": 12.97292,
+   "lng": 80.25413,
+   "km2": 2.497
+  },
+  {
+   "ward": 184,
+   "zone": "Perungudi",
+   "lat": 12.97045,
+   "lng": 80.23836,
+   "km2": 2.909
+  },
+  {
+   "ward": 185,
+   "zone": "Perungudi",
+   "lat": 12.96191,
+   "lng": 80.2546,
+   "km2": 2.083
+  },
+  {
+   "ward": 186,
+   "zone": "Perungudi",
+   "lat": 12.95829,
+   "lng": 80.23897,
+   "km2": 1.849
+  },
+  {
+   "ward": 187,
+   "zone": "Perungudi",
+   "lat": 12.96239,
+   "lng": 80.19328,
+   "km2": 0.883
+  },
+  {
+   "ward": 188,
+   "zone": "Perungudi",
+   "lat": 12.95545,
+   "lng": 80.20467,
+   "km2": 4.276
+  },
+  {
+   "ward": 189,
+   "zone": "Perungudi",
+   "lat": 12.94484,
+   "lng": 80.22065,
+   "km2": 10.913
+  },
+  {
+   "ward": 190,
+   "zone": "Perungudi",
+   "lat": 12.92418,
+   "lng": 80.20938,
+   "km2": 4.614
+  },
+  {
+   "ward": 191,
+   "zone": "Perungudi",
+   "lat": 12.91718,
+   "lng": 80.20267,
+   "km2": 2.262
+  },
+  {
+   "ward": 192,
+   "zone": "Sozhinganallur",
+   "lat": 12.94872,
+   "lng": 80.25483,
+   "km2": 2.503
+  },
+  {
+   "ward": 193,
+   "zone": "Sozhinganallur",
+   "lat": 12.94645,
+   "lng": 80.24238,
+   "km2": 2.411
+  },
+  {
+   "ward": 194,
+   "zone": "Sozhinganallur",
+   "lat": 12.93667,
+   "lng": 80.23786,
+   "km2": 2.19
+  },
+  {
+   "ward": 195,
+   "zone": "Sozhinganallur",
+   "lat": 12.9263,
+   "lng": 80.2354,
+   "km2": 1.729
+  },
+  {
+   "ward": 196,
+   "zone": "Sozhinganallur",
+   "lat": 12.92213,
+   "lng": 80.25062,
+   "km2": 5.203
+  },
+  {
+   "ward": 197,
+   "zone": "Sozhinganallur",
+   "lat": 12.90498,
+   "lng": 80.22854,
+   "km2": 8.978
+  },
+  {
+   "ward": 198,
+   "zone": "Sozhinganallur",
+   "lat": 12.88827,
+   "lng": 80.23591,
+   "km2": 8.704
+  },
+  {
+   "ward": 199,
+   "zone": "Sozhinganallur",
+   "lat": 12.8687,
+   "lng": 80.24398,
+   "km2": 2.993
+  },
+  {
+   "ward": 200,
+   "zone": "Sozhinganallur",
+   "lat": 12.86647,
+   "lng": 80.22443,
+   "km2": 7.416
+  }
+ ]
+}
