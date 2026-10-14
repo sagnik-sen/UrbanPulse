@@ -6,6 +6,7 @@ import { STATUS, rainLabel, hourLabel } from "../constants";
 import { t, useLang } from "../i18n";
 import MapReady from "../MapReady";
 import ReportModal from "../ReportModal";
+import RescueRequest from "../RescueRequest";
 import Toasts from "../Toasts";
 import OfflineBanner, { offlineCheckText } from "../OfflineBanner";
 import SmsDemo from "../SmsDemo";
@@ -321,6 +322,7 @@ export default function Citizen() {
       <AlertCheck request={checkRequest} lang={lang} />
 
       <button className="btn danger c-report-btn" onClick={() => setReportOpen(true)}>{t(lang, "report.open")}</button>
+      <RescueRequest lang={lang} area={area} coords={coords} />
 
       <section className="c-card">
         <h2 style={{ marginBottom: 10 }}>{t(lang, "emergency.title")}</h2>

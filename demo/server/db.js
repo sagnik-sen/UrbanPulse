@@ -14,6 +14,8 @@ function openDb(file = path.join(DATA_DIR, "urbanpulse.db")) {
     CREATE TABLE IF NOT EXISTS reports    (id TEXT PRIMARY KEY, ts INTEGER NOT NULL, data TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS incidents  (id TEXT PRIMARY KEY, ts INTEGER NOT NULL, data TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS broadcasts (id TEXT PRIMARY KEY, ts INTEGER NOT NULL, data TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS rescues    (id TEXT PRIMARY KEY, ts INTEGER NOT NULL, data TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS boats      (id TEXT PRIMARY KEY, ts INTEGER NOT NULL, data TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS settings   (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -56,7 +58,7 @@ function openDb(file = path.join(DATA_DIR, "urbanpulse.db")) {
     db.exec("ALTER TABLE anchor_batches ADD COLUMN agency TEXT");
   }
 
-  const RECORD_TABLES = new Set(["reports", "incidents", "broadcasts"]);
+  const RECORD_TABLES = new Set(["reports", "incidents", "broadcasts", "rescues", "boats"]);
   const check = (table) => {
     if (!RECORD_TABLES.has(table)) throw new Error(`unknown table ${table}`);
     return table;
@@ -74,7 +76,7 @@ function openDb(file = path.join(DATA_DIR, "urbanpulse.db")) {
         .run(record.id, ts, JSON.stringify(record));
     },
     clearRecords() {
-      db.exec("DELETE FROM reports; DELETE FROM incidents; DELETE FROM broadcasts;");
+      db.exec("DELETE FROM reports; DELETE FROM incidents; DELETE FROM broadcasts; DELETE FROM rescues; DELETE FROM boats;");
     },
 
     // append-only: entries are never pruned (and survive "clear demo data"), since anchored

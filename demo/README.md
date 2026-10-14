@@ -39,6 +39,7 @@ Override the demo passwords with `UP_ADMIN_PASSWORD`, `UP_OFFICER_PASSWORD` and
 
 - **Overview**: KPIs (active incidents, residents at risk, open reports, people sheltered), map, unified activity feed, "unassigned incident" banner
 - **Evacuation Planner**: pick zones (flooding ones are suggested) and a head count; it assigns every group to a shelter and road using the live forecast and optimal capacity-aware assignment, and compares that with a conventional current-conditions, first-come plan. Admins and officers can issue the plan as an evacuation order (holds shelter seats, alerts each zone, logs it on the incident)
+- **Boat Rescue** (staff): open requests sorted by need and waiting time, boats on a rescue, and the volunteer fleet. "Match boats (optimal)" and "Match boats (first-come)" pair requests with free boats; "Mark rescued" closes a request and frees its boat. Officers and admins register boats and set their status
 - **Live Map**: zones, relief shelters and citizen reports as toggleable layers with a legend. Map clicks either file a report or plan an evacuation (real road route to the best open shelter, steering around red danger rings)
 - **Sensor Grid / Zone Detail**: measured history plus a 2-hour forecast with a 95% band, projected peak, incidents, local reports, shelter occupancy, "Evacuation route" and "Simulate storm here"
 - **Incidents**: one incident per danger episode (auto-opens, auto-clears); dispatch a response team, expand a row for the timeline, add field notes, export CSV
@@ -114,6 +115,18 @@ Compares nine planning policies over 1,600 seeded flood scenarios on real road r
 (`experiments/routes.json`, fetched once with `experiments/fetch-routes.js`) and writes
 `experiments/results/results.md`. Plans use only what is known at planning time and are
 scored against what the water actually did.
+
+## Volunteer boat rescue
+
+In the 2015 Chennai floods, fishermen's boats and volunteers carried out a large share of the rescues, and the requests were coordinated chaotically over social media. The rescue desk takes that work into one queue. A citizen taps "Need rescue? Request a boat" in the citizen app, gives the number of people, any medical, elderly, child or disability needs, and optionally a note and a phone number. The card then follows the request: waiting for a boat, boat on the way, marked rescued. Volunteer boats register with the control room (a demo fleet of six is seeded on first start). The control room matches boats to requests with the same min-cost assignment solver as the evacuation planner: travel time, with a head start for medical, disabled, elderly and child needs, and older requests first. Each step (request, assignment, completion, cancellation, boat changes) is written to the audit log.
+
+Phone numbers are for the control room only. They are never sent to the public endpoints, the citizen status check returns only the status and boat name, and the live events go to signed-in staff sockets only. Audit entries carry no phone numbers or coordinates.
+
+Assumptions for the matching and the 6-hour dispatch experiment (boat speed 8 km/h, straight-line distances, 10 minutes to load and 5 to unload) are listed in `server/experiments/results/rescue.md`. Reproduce with:
+
+```bash
+cd demo/server && node experiments/rescue.js
+```
 
 ## Blockchain audit anchoring
 

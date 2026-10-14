@@ -6,7 +6,7 @@ import Toasts from "./Toasts";
 import { useAuth, ROLE_LABEL } from "./AuthContext";
 
 export default function Layout() {
-  const { connected, incidents, reports } = useFloodData();
+  const { connected, incidents, reports, rescues } = useFloodData();
   const { user, logout, can } = useAuth();
   const navigate = useNavigate();
   const [now, setNow] = useState(Date.now());
@@ -19,11 +19,13 @@ export default function Layout() {
 
   const activeIncidents = incidents.filter((i) => i.status !== "cleared").length;
   const openReports = reports.filter((r) => r.status !== "resolved").length;
+  const openRescues = rescues.filter((r) => r.status === "open").length;
 
   const nav = [
     { to: "/", label: "Overview", end: true },
     { to: "/map", label: "Live Map" },
     { to: "/planner", label: "Evacuation Planner" },
+    { to: "/rescue", label: "Boat Rescue", badge: openRescues, badgeKind: "danger" },
     { to: "/sensors", label: "Sensor Grid" },
     { to: "/incidents", label: "Incidents", badge: activeIncidents, badgeKind: "danger" },
     { to: "/reports", label: "Citizen Reports", badge: openReports, badgeKind: "warning" },

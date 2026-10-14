@@ -54,6 +54,8 @@ export function FloodDataProvider({ children }) {
   const latestPublic = useRef(null);
   const snapshotSaved = useRef(0);
   const snapshotTimer = useRef(null);
+  const [rescues, setRescues] = useState([]); // boat rescue requests, staff only
+  const [boats, setBoats] = useState([]); // volunteer boats, staff only
 
   const pushToast = useCallback((toast) => {
     const id = Date.now() + Math.random();
@@ -62,6 +64,19 @@ export function FloodDataProvider({ children }) {
   }, []);
 
   const dismissToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
+
+  // rescue requests carry staff-only phone numbers, so only signed-in staff ask for them
+  useEffect(() => {
+    if (!userId) return;
+    fetch(`${SERVER_URL}/api/rescue`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => {
+        if (!s) return;
+        setRescues(s.rescues);
+        setBoats(s.boats);
+      })
+      .catch(() => {});
+  }, [userId]);
 
   // staff get the full picture; the public citizen app gets levels, shelters and alerts only
   useEffect(() => {
@@ -177,6 +192,16 @@ export function FloodDataProvider({ children }) {
     }));
     socket.on("rain-link-updated", ({ rainLink: on }) => setRainLinkState(on));
     socket.on("sensors-offline", setOfflineSensors);
+    socket.on("rescue-requested", (r) => {
+      upsert(setRescues)(r);
+      pushToast({ kind: "danger", title: "Boat rescue request", text: `${r.zoneName}: ${r.people} people${r.needs.length ? ` (${r.needs.join(", ")})` : ""}`, link: "/rescue" });
+    });
+    socket.on("rescue-updated", upsert(setRescues));
+    socket.on("boat-updated", upsert(setBoats));
+    socket.on("rescue-reset", ({ boats: fleet }) => {
+      setRescues([]);
+      setBoats(fleet);
+    });
     socket.on("data-cleared", ({ thresholds: t }) => {
       setIncidents([]);
       setReports([]);
@@ -194,7 +219,7 @@ export function FloodDataProvider({ children }) {
   });
 
   const value = {
-    locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts, rainfall, rainLink, liveAudit, liveAnchors, offlineSensors, offline, online, snapshotAt,
+    locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts, rainfall, rainLink, liveAudit, liveAnchors, offlineSensors, offline, online, snapshotAt, rescues, boats,
     pushToast,
     dismissToast,
     submitReport: (body) => api("/api/citizen-report", "POST", body),
@@ -217,6 +242,13 @@ export function FloodDataProvider({ children }) {
     verifyAudit: () => call(api("/api/audit/verify", "GET")),
     buildEvacuationPlan: (body) => call(api("/api/evacuation-plan", "POST", body)),
     issueEvacuationOrder: (body) => call(api("/api/evacuation-plan/execute", "POST", body)),
+    requestRescue: (body) => api("/api/rescue", "POST", body),
+    rescueStatus: (id) => api(`/api/rescue/${encodeURIComponent(id)}`, "GET"),
+    cancelRescue: (id) => api(`/api/rescue/${encodeURIComponent(id)}/cancel`, "POST", {}),
+    matchBoats: (method) => call(api("/api/rescue/match", "POST", { method })),
+    markRescued: (id) => call(api(`/api/rescue/${id}/rescued`, "POST", {})),
+    registerBoat: (body) => call(api("/api/boats", "POST", body)),
+    updateBoat: (id, body) => call(api(`/api/boats/${id}`, "PATCH", body)),
   };
 
   return <FloodDataContext.Provider value={value}>{children}</FloodDataContext.Provider>;

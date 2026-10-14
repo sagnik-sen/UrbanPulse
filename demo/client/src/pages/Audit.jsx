@@ -21,10 +21,16 @@ const ACTIONS = {
   incident_cleared: { label: "Incident cleared", tone: "neutral" },
   reservoir_release: { label: "Reservoir release", tone: "danger" },
   sensor_status: { label: "Sensor status", tone: "warn" },
+  rescue_requested: { label: "Boat rescue requested", tone: "warn" },
+  rescue_assigned: { label: "Boat assigned", tone: "info" },
+  rescue_completed: { label: "Rescue completed", tone: "ok" },
+  rescue_cancelled: { label: "Rescue cancelled", tone: "neutral" },
+  boat_registered: { label: "Boat registered", tone: "info" },
+  boat_updated: { label: "Boat updated", tone: "neutral" },
 };
 
 // who acts when no staff member is signed in
-const SYSTEM_ACTOR = { alert_published: "public", incident_opened: "system", incident_cleared: "system" };
+const SYSTEM_ACTOR = { alert_published: "public", incident_opened: "system", incident_cleared: "system", rescue_requested: "public", rescue_cancelled: "public" };
 
 // one readable sentence per entry
 function describe(e) {
@@ -48,6 +54,12 @@ function describe(e) {
     case "incident_cleared": return `${d.zone} back to ${d.level}% (${d.how})`;
     case "reservoir_release": return `${d.reservoir}: ${d.cusecs} cusecs for ${d.durationHours} h ("${d.reason}")`;
     case "sensor_status": return `${d.zone} sensor ${d.online ? "back online" : "taken offline"}`;
+    case "rescue_requested": return `${d.people} people in ${d.zone}${d.needs?.length ? ` (${d.needs.join(", ")})` : ""}`;
+    case "rescue_assigned": return `${d.boat} sent, ${d.minutes} min away (${d.method} matching)`;
+    case "rescue_completed": return `${d.boat} brought ${d.people} people from ${d.zone} to safety`;
+    case "rescue_cancelled": return `${d.zone} request for ${d.people} people${d.boat ? `, ${d.boat} turned back` : ""}`;
+    case "boat_registered": return `${d.boat} (${d.owner}, ${d.capacity} seats) registered`;
+    case "boat_updated": return `${d.boat}: ${d.from} → ${d.to}`;
     default: return JSON.stringify(d);
   }
 }

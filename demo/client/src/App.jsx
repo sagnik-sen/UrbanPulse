@@ -18,6 +18,7 @@ import Architecture from "./pages/Architecture";
 import Settings from "./pages/Settings";
 import Citizen from "./pages/Citizen";
 import Planner from "./pages/Planner";
+import Rescue from "./pages/Rescue";
 import Audit from "./pages/Audit";
 import Reservoirs from "./pages/Reservoirs";
 import "./App.css";
@@ -34,6 +35,7 @@ export default function App() {
               <Route index element={<Overview />} />
               <Route path="map" element={<LiveMap />} />
               <Route path="planner" element={<Planner />} />
+              <Route path="rescue" element={<Rescue />} />
               <Route path="sensors" element={<SensorGrid />} />
               <Route path="sensors/:id" element={<ZoneDetail />} />
               <Route path="incidents" element={<Incidents />} />

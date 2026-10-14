@@ -18,6 +18,7 @@ const { createAnchor } = require("./anchor");
 const { buildTimelines, summarize } = require("./accountability");
 const { fusedZones } = require("./fusion-live");
 const { RESERVOIRS, releaseImpact } = require("./reservoirs");
+const { matchOptimal, matchGreedy, validateRequest, validateBoat, validateBoatPatch, publicRequest, requestStatus, demoBoats, MATCH_METHODS } = require("./rescue");
 
 // optional server/.env holds the signing key for blockchain anchoring; the app runs without it
 try { process.loadEnvFile(path.join(__dirname, ".env")); } catch {}
@@ -46,12 +47,20 @@ const STAFF_ROOM = "staff";
 
 // staff sockets join a room; incident and report events (reporter names, dispatch) only go there
 const ADMIN_ROOM = "admins";
+const RESPONDER_ROOM = "responders";
 io.on("connection", (socket) => {
   const user = auth.userFromCookieHeader(socket.handshake.headers.cookie);
   if (user) socket.join(STAFF_ROOM);
   if (user?.role === "admin") socket.join(ADMIN_ROOM);
+  if (RESPONDERS.includes(user?.role)) socket.join(RESPONDER_ROOM);
 });
 const toStaff = (event, payload) => io.to(STAFF_ROOM).emit(event, payload);
+// rescue requests carry the requester's phone number, which only responders get
+const toStaffRescue = (event, r) => {
+  io.to(RESPONDER_ROOM).emit(event, r);
+  const { contact, ...withoutContact } = r;
+  io.to(STAFF_ROOM).except(RESPONDER_ROOM).emit(event, withoutContact);
+};
 
 // who did what, when; admins see it live on the Audit Log page
 function audit(user, action, details = {}) {
@@ -119,13 +128,26 @@ const history = Object.fromEntries(LOCATIONS.map((l) => [l.id, []]));
 const INCIDENTS_CAP = 100;
 const REPORTS_CAP = 500;
 const BROADCASTS_CAP = 100;
+const RESCUES_CAP = 500;
+const BOATS_CAP = 100;
 let incidents = db.load("incidents", INCIDENTS_CAP);
 let citizenReports = db.load("reports", REPORTS_CAP);
 let broadcasts = db.load("broadcasts", BROADCASTS_CAP);
+let rescues = db.load("rescues", RESCUES_CAP);
+let boats = db.load("boats", BOATS_CAP);
 
 const saveIncident = (inc) => db.save("incidents", inc, inc.startTs);
 const saveReport = (r) => db.save("reports", r, r.ts);
 const saveBroadcast = (b) => db.save("broadcasts", b, b.ts);
+const saveRescue = (r) => db.save("rescues", r, r.ts);
+const saveBoat = (b) => db.save("boats", b, b.ts);
+// demo fleet when no boats are registered: on first start, and again after clearing demo data
+function seedDemoBoats() {
+  if (boats.length > 0) return;
+  boats = demoBoats(Date.now());
+  boats.forEach(saveBoat);
+}
+seedDemoBoats();
 let t = 0;
 
 // zones whose water-level sensor an admin has taken offline; their level is ignored by fusion
@@ -394,6 +416,116 @@ app.patch("/api/incidents/:id", requireRole(...RESPONDERS), (req, res) => {
   res.json(inc);
 });
 
+// ---- Volunteer boat rescue -----------------------------------------------------
+// Citizens post requests (public, using the id they keep); volunteer boats register; the control room
+// matches them. Phone numbers are staff-only: public responses drop them and events go to staff only.
+app.post("/api/rescue", (req, res) => {
+  const parsed = validateRequest(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const zone = nearestZone(parsed.value.lat, parsed.value.lng);
+  const r = { id: randomUUID(), ...parsed.value, zoneId: zone.id, zoneName: zone.name, status: "open", boatId: null, ts: Date.now(), assignedAt: null, rescuedAt: null };
+  rescues.unshift(r);
+  rescues = rescues.slice(0, RESCUES_CAP);
+  saveRescue(r);
+  toStaffRescue("rescue-requested", r);
+  audit(null, "rescue_requested", { requestId: r.id, zone: zone.name, people: r.people, needs: r.needs });
+  res.json(publicRequest(r));
+});
+
+app.post("/api/rescue/:id/cancel", (req, res) => {
+  const r = rescues.find((x) => x.id === req.params.id);
+  if (!r) return res.status(404).json({ error: "not found" });
+  if (r.status !== "open" && r.status !== "assigned") return res.status(409).json({ error: "This request is already closed" });
+  // a boat already on its way turns back and is free again (its position is unchanged)
+  const boat = boats.find((b) => b.id === r.boatId);
+  if (boat) {
+    Object.assign(boat, { status: "available", ts: Date.now() });
+    saveBoat(boat);
+    toStaff("boat-updated", boat);
+  }
+  Object.assign(r, { status: "cancelled" });
+  saveRescue(r);
+  toStaffRescue("rescue-updated", r);
+  audit(null, "rescue_cancelled", { requestId: r.id, zone: r.zoneName, people: r.people, boat: boat?.name ?? null });
+  res.json(requestStatus(r, boats));
+});
+
+app.get("/api/rescue/:id", (req, res) => {
+  const r = rescues.find((x) => x.id === req.params.id);
+  if (!r) return res.status(404).json({ error: "not found" });
+  res.json(requestStatus(r, boats));
+});
+
+app.get("/api/rescue", requireRole(...STAFF), (req, res) => {
+  // requesters' phone numbers are for responders only, not observers
+  const canCall = RESPONDERS.includes(req.user.role);
+  res.json({ rescues: canCall ? rescues : rescues.map(({ contact, ...r }) => r), boats });
+});
+
+app.post("/api/boats", requireRole(...RESPONDERS), (req, res) => {
+  const parsed = validateBoat(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const boat = { id: randomUUID(), ...parsed.value, ts: Date.now() };
+  boats.push(boat);
+  saveBoat(boat);
+  toStaff("boat-updated", boat);
+  audit(req.user, "boat_registered", { boatId: boat.id, boat: boat.name, owner: boat.owner, capacity: boat.capacity });
+  res.json(boat);
+});
+
+app.patch("/api/boats/:id", requireRole(...RESPONDERS), (req, res) => {
+  const boat = boats.find((b) => b.id === req.params.id);
+  if (!boat) return res.status(404).json({ error: "not found" });
+  const parsed = validateBoatPatch(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  if (boat.status === "busy" && parsed.value.status && parsed.value.status !== "busy") {
+    return res.status(409).json({ error: "This boat is on a rescue: mark its request rescued or cancel it first" });
+  }
+  const from = boat.status;
+  Object.assign(boat, parsed.value, { ts: Date.now() });
+  saveBoat(boat);
+  toStaff("boat-updated", boat);
+  audit(req.user, "boat_updated", { boatId: boat.id, boat: boat.name, from, to: boat.status });
+  res.json(boat);
+});
+
+// pairs open requests with free boats; "optimal" is the min-cost assignment, "greedy" the first-come baseline
+app.post("/api/rescue/match", requireRole(...RESPONDERS), (req, res) => {
+  const method = req.body?.method;
+  if (!MATCH_METHODS.includes(method)) return res.status(400).json({ error: "method must be optimal or greedy" });
+  const now = Date.now();
+  const pairs = (method === "optimal" ? matchOptimal : matchGreedy)(rescues, boats, now);
+  for (const m of pairs) {
+    const r = rescues.find((x) => x.id === m.requestId);
+    const boat = boats.find((x) => x.id === m.boatId);
+    Object.assign(r, { status: "assigned", boatId: boat.id, assignedAt: now });
+    Object.assign(boat, { status: "busy", ts: now });
+    saveRescue(r);
+    saveBoat(boat);
+    toStaffRescue("rescue-updated", r);
+    toStaff("boat-updated", boat);
+    audit(req.user, "rescue_assigned", { requestId: r.id, boatId: boat.id, boat: boat.name, minutes: Math.round(m.minutes * 10) / 10, method });
+  }
+  res.json({ method, assigned: pairs.length });
+});
+
+app.post("/api/rescue/:id/rescued", requireRole(...RESPONDERS), (req, res) => {
+  const r = rescues.find((x) => x.id === req.params.id);
+  if (!r) return res.status(404).json({ error: "not found" });
+  if (r.status !== "assigned") return res.status(409).json({ error: "Only an assigned request can be marked rescued" });
+  const now = Date.now();
+  Object.assign(r, { status: "rescued", rescuedAt: now });
+  // the boat is free again where it dropped its passengers
+  const boat = boats.find((b) => b.id === r.boatId);
+  Object.assign(boat, { status: "available", lat: r.lat, lng: r.lng, ts: now });
+  saveRescue(r);
+  saveBoat(boat);
+  toStaffRescue("rescue-updated", r);
+  toStaff("boat-updated", boat);
+  audit(req.user, "rescue_completed", { requestId: r.id, boatId: boat.id, boat: boat.name, zone: r.zoneName, people: r.people });
+  res.json(r);
+});
+
 app.post("/api/broadcasts", requireRole("admin"), (req, res) => {
   const { zoneId, severity, message, channels } = req.body;
   if (!message || !String(message).trim()) return res.status(400).json({ error: "message required" });
@@ -414,9 +546,13 @@ app.post("/api/admin/clear-data", requireRole("admin"), (req, res) => {
   incidents = [];
   citizenReports = [];
   broadcasts = [];
+  rescues = [];
+  boats = [];
+  seedDemoBoats();
   thresholds = { ...DEFAULT_THRESHOLDS };
   db.setSetting("thresholds", thresholds);
   io.emit("data-cleared", { thresholds });
+  toStaff("rescue-reset", { boats });
   audit(req.user, "demo_data_cleared");
   res.json({ ok: true });
 });
@@ -678,7 +814,7 @@ app.post("/api/reservoirs/release", requireRole(...RESPONDERS), (req, res) => {
   res.json({ ok: true, alerts: reservoir.downstream.length });
 });
 
-const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared", "sensor_status", "reservoir_release"]);
+const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared", "sensor_status", "reservoir_release", "rescue_requested", "rescue_assigned", "rescue_completed", "rescue_cancelled", "boat_registered", "boat_updated"]);
 
 app.get("/api/audit", requireRole("admin"), (req, res) => {
   const action = AUDIT_ACTIONS.has(req.query.action) ? req.query.action : undefined;
