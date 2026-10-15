@@ -21,6 +21,7 @@ const { fusedZones } = require("./fusion-live");
 const { RESERVOIRS, releaseImpact } = require("./reservoirs");
 const { matchOptimal, matchGreedy, validateRequest, validateBoat, validateBoatPatch, publicRequest, requestStatus, demoBoats, MATCH_METHODS } = require("./rescue");
 const { rateLimit } = require("./ratelimit");
+const { occupied, checkIn, checkOut, tokenMatches, newToken } = require("./checkin");
 
 // optional server/.env holds the signing key for blockchain anchoring; the app runs without it
 try { process.loadEnvFile(path.join(__dirname, ".env")); } catch {}
@@ -57,6 +58,7 @@ const vulnerableLimit = rateLimit({ windowMs: 60 * 60_000, max: 10, name: "vulne
 const smsLimit = rateLimit({ windowMs: 60_000, max: 30, name: "sms" });
 const alertVerifyLimit = rateLimit({ windowMs: 60_000, max: 60, name: "alert-verify" });
 const evacuationRouteLimit = rateLimit({ windowMs: 60_000, max: 30, name: "evacuation-route" });
+const checkinLimit = rateLimit({ windowMs: 10 * 60_000, max: 30, name: "shelter-checkin" });
 
 const STAFF_ROOM = "staff";
 
@@ -246,6 +248,7 @@ function updateIncidents(payload) {
 
 function updateShelters() {
   SHELTERS.forEach((s) => {
+    if (shelterMode === "checkins") return (s.occupancy = occupied(checkins, s.id));
     const active = incidents.some((i) => i.zoneId === s.zoneId && i.status !== "cleared");
     const delta = active ? 5 + Math.random() * 10 : -2;
     s.occupancy = Math.round(Math.max(0, Math.min(s.capacity, s.occupancy + delta)));
@@ -319,11 +322,11 @@ app.get("/api/auth/me", (req, res) => {
 
 // citizen app: live levels, shelters, public alerts; nothing with reporter names or dispatch details
 app.get("/api/public-state", (req, res) => {
-  res.json({ locations: currentSnapshot(), broadcasts, shelters: SHELTERS, thresholds, rainfall: rainfallView(), rainLink });
+  res.json({ locations: currentSnapshot(), broadcasts, shelters: SHELTERS, shelterMode, thresholds, rainfall: rainfallView(), rainLink });
 });
 
 app.get("/api/state", requireRole(...STAFF), (req, res) => {
-  res.json({ locations: currentSnapshot(), history, incidents, reports: citizenReports, broadcasts, shelters: SHELTERS, teams: TEAMS, thresholds, rainfall: rainfallView(), rainLink, offlineSensors: [...offlineSensors] });
+  res.json({ locations: currentSnapshot(), history, incidents, reports: citizenReports, broadcasts, shelters: SHELTERS, shelterMode, shelterCheckins: checkinSummary(), teams: TEAMS, thresholds, rainfall: rainfallView(), rainLink, offlineSensors: [...offlineSensors] });
 });
 
 app.put("/api/thresholds", requireRole("admin"), (req, res) => {
@@ -594,6 +597,81 @@ async function fetchOsrm(points, { alternatives }) {
     durationMin: r.duration / 60,
   }));
 }
+
+// ---- Shelter check-in ---------------------------------------------------------
+// Occupancy is simulated or live from check-ins. Each shelter has a secret token on its QR poster,
+// so only someone at the shelter can register. Households are counts only: no names or contacts.
+const SHELTER_MODES = ["simulated", "checkins"];
+let shelterMode = db.getSetting("shelterMode", "simulated");
+let checkins = db.getSetting("shelterCheckins", {});
+const shelterTokens = db.getSetting("shelterTokens", {});
+for (const s of SHELTERS) shelterTokens[s.id] ??= newToken();
+db.setSetting("shelterTokens", shelterTokens);
+
+const findShelter = (id) => SHELTERS.find((s) => s.id === id);
+function checkinSummary() {
+  return Object.fromEntries(SHELTERS.map((s) => [s.id, { households: (checkins[s.id] || []).length, people: occupied(checkins, s.id) }]));
+}
+// save, and show live occupancy at once rather than on the next tick
+function publishCheckins() {
+  db.setSetting("shelterCheckins", checkins);
+  if (shelterMode === "checkins") SHELTERS.forEach((s) => (s.occupancy = occupied(checkins, s.id)));
+  io.emit("shelters-update", SHELTERS);
+}
+
+app.get("/api/shelters/tokens", requireRole(...RESPONDERS), (req, res) => {
+  res.json(shelterTokens);
+});
+
+app.put("/api/shelters/mode", requireRole("admin"), (req, res) => {
+  const { mode } = req.body ?? {};
+  if (!SHELTER_MODES.includes(mode)) return res.status(400).json({ error: "Mode must be simulated or checkins" });
+  if (mode !== shelterMode) {
+    audit(req.user, "shelter_mode", { from: shelterMode, to: mode });
+    shelterMode = mode;
+    db.setSetting("shelterMode", shelterMode);
+  }
+  res.json({ mode: shelterMode });
+});
+
+app.post("/api/shelters/:id/token", requireRole("admin"), (req, res) => {
+  const shelter = findShelter(req.params.id);
+  if (!shelter) return res.status(404).json({ error: "Unknown shelter" });
+  shelterTokens[shelter.id] = newToken();
+  db.setSetting("shelterTokens", shelterTokens);
+  audit(req.user, "shelter_token_rotated", { shelterId: shelter.id, shelter: shelter.name });
+  res.json({ ok: true });
+});
+
+// public: the token printed on the shelter's poster is the only proof of presence
+app.post("/api/shelters/:id/checkin", checkinLimit, (req, res) => {
+  const shelter = findShelter(req.params.id);
+  if (!shelter) return res.status(404).json({ error: "Unknown shelter" });
+  const { token, people } = req.body ?? {};
+  if (typeof token !== "string" || !Number.isInteger(people)) return res.status(400).json({ error: "token and people are required" });
+  if (!tokenMatches(shelterTokens[shelter.id], token)) return res.status(403).json({ error: "This code is not valid for this shelter. Scan the code on the poster at the shelter." });
+  const r = checkIn(checkins, shelter, people, Date.now());
+  if (r.error) return res.status(400).json({ error: r.error });
+  if (r.full) return res.status(409).json({ error: "This shelter does not have room for your group", free: r.free });
+  checkins = r.state;
+  publishCheckins();
+  audit(null, "shelter_checkin", { shelterId: shelter.id, shelter: shelter.name, people });
+  res.json({ householdId: r.household.id, free: r.free });
+});
+
+app.post("/api/shelters/:id/checkout", checkinLimit, (req, res) => {
+  const shelter = findShelter(req.params.id);
+  if (!shelter) return res.status(404).json({ error: "Unknown shelter" });
+  const { token, householdId } = req.body ?? {};
+  if (typeof token !== "string" || typeof householdId !== "string") return res.status(400).json({ error: "token and householdId are required" });
+  if (!tokenMatches(shelterTokens[shelter.id], token)) return res.status(403).json({ error: "This code is not valid for this shelter. Scan the code on the poster at the shelter." });
+  const r = checkOut(checkins, shelter.id, householdId);
+  if (!r) return res.status(404).json({ error: "No check-in found for this household" });
+  checkins = r.state;
+  publishCheckins();
+  audit(null, "shelter_checkout", { shelterId: shelter.id, shelter: shelter.name, people: r.household.people });
+  res.json({ ok: true });
+});
 
 // Seats held for people already travelling to a shelter, so parallel requests spread out
 // instead of all being sent to the same "free" shelter. Held for the drive plus a margin.
@@ -879,7 +957,7 @@ app.post("/api/reservoirs/release", requireRole(...RESPONDERS), (req, res) => {
   res.json({ ok: true, alerts: reservoir.downstream.length });
 });
 
-const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared", "sensor_status", "reservoir_release", "rescue_requested", "rescue_assigned", "rescue_completed", "rescue_cancelled", "boat_registered", "boat_updated", "vulnerable_registered", "vulnerable_cancelled"]);
+const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared", "sensor_status", "reservoir_release", "rescue_requested", "rescue_assigned", "rescue_completed", "rescue_cancelled", "boat_registered", "boat_updated", "vulnerable_registered", "vulnerable_cancelled", "shelter_mode", "shelter_token_rotated", "shelter_checkin", "shelter_checkout"]);
 
 app.get("/api/audit", requireRole("admin"), (req, res) => {
   const action = AUDIT_ACTIONS.has(req.query.action) ? req.query.action : undefined;

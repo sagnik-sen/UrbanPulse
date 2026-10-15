@@ -29,10 +29,14 @@ const ACTIONS = {
   boat_updated: { label: "Boat updated", tone: "neutral" },
   vulnerable_registered: { label: "Vulnerable resident registered", tone: "neutral" },
   vulnerable_cancelled: { label: "Vulnerable resident cancelled", tone: "neutral" },
+  shelter_checkin: { label: "Shelter check-in", tone: "neutral" },
+  shelter_checkout: { label: "Shelter check-out", tone: "neutral" },
+  shelter_mode: { label: "Shelter occupancy mode", tone: "warn" },
+  shelter_token_rotated: { label: "Shelter check-in code replaced", tone: "warn" },
 };
 
 // who acts when no staff member is signed in
-const SYSTEM_ACTOR = { alert_published: "public", incident_opened: "system", incident_cleared: "system", rescue_requested: "public", rescue_cancelled: "public" };
+const SYSTEM_ACTOR = { alert_published: "public", incident_opened: "system", incident_cleared: "system", rescue_requested: "public", rescue_cancelled: "public", shelter_checkin: "public", shelter_checkout: "public" };
 
 // one readable sentence per entry
 function describe(e) {
@@ -64,6 +68,10 @@ function describe(e) {
     case "boat_updated": return `${d.boat}: ${d.from} → ${d.to}`;
     case "vulnerable_registered": return `${d.zoneId}: ${d.category}, ${d.count} ${d.count === 1 ? "person" : "people"}`;
     case "vulnerable_cancelled": return `${d.zoneId}: ${d.category}, ${d.count} ${d.count === 1 ? "person" : "people"} (cancelled by the resident)`;
+    case "shelter_checkin": return `${d.shelter}: ${d.people} ${d.people === 1 ? "person" : "people"} checked in`;
+    case "shelter_checkout": return `${d.shelter}: ${d.people} ${d.people === 1 ? "person" : "people"} checked out`;
+    case "shelter_mode": return `Occupancy ${d.from === "checkins" ? "live check-ins" : "simulated"} → ${d.to === "checkins" ? "live check-ins" : "simulated"}`;
+    case "shelter_token_rotated": return `${d.shelter}: old check-in posters no longer work`;
     default: return JSON.stringify(d);
   }
 }

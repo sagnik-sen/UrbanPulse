@@ -17,6 +17,7 @@ import Accountability from "./pages/Accountability";
 import Architecture from "./pages/Architecture";
 import Settings from "./pages/Settings";
 import Citizen from "./pages/Citizen";
+import CheckIn from "./pages/CheckIn";
 import Planner from "./pages/Planner";
 import Rescue from "./pages/Rescue";
 import Audit from "./pages/Audit";
@@ -31,6 +32,7 @@ export default function App() {
           <Routes>
             <Route path="login" element={<Login />} />
             <Route path="citizen" element={<Citizen />} />
+            <Route path="checkin/:shelterId" element={<CheckIn />} />
             <Route element={<RequireAuth><Layout /></RequireAuth>}>
               <Route index element={<Overview />} />
               <Route path="map" element={<LiveMap />} />

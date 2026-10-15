@@ -45,7 +45,7 @@ Override the demo passwords with `UP_ADMIN_PASSWORD`, `UP_OFFICER_PASSWORD` and
 - **Incidents**: one incident per danger episode (auto-opens, auto-clears); dispatch a response team, expand a row for the timeline, add field notes, export CSV
 - **Citizen Reports**: modal form (issue type, severity, description, optional name, nearest zone auto-detected), open → in progress → resolved workflow, filters, export CSV
 - **Broadcasts**: compose SMS/push/siren alerts by zone with templates; history shows automated vs manual alerts and recipient estimates
-- **Relief Shelters**: capacity and live occupancy (rises while the linked zone has an active incident)
+- **Relief Shelters**: capacity and live occupancy (rises while the linked zone has an active incident, or follows check-ins in live mode), with check-in QR codes for each shelter
 - **Citizen app** (`/citizen`, also linked from the sidebar): mobile-first public view with area status in plain language, the forecast, an automatic safe route when your area floods, official alerts, the report form and tap-to-call emergency numbers
 - **Live rainfall**: real per-zone rain on the Overview, an hourly 24 h rain chart on Zone Detail, a rain line on sensor cards and in the citizen app
 - **Audit Log** (admin): every staff action and sign-in attempt (thresholds, storms, dispatches, notes, report status, broadcasts, evacuation orders, rain link, failed/locked sign-ins), live, searchable, exportable as CSV. It is append-only, kept when demo data is cleared, and anchored to the Shardeum blockchain: **Anchor now** / **Verify on chain** show each entry as verified or tampered
@@ -136,6 +136,16 @@ A resident can register that someone at home needs help to evacuate (elderly, di
 - **Planning:** when a selected zone has registrations, the proposed plan places people in three tiers, each on the beds the earlier tiers left: mobility and medical needs in accessible shelters only, then elderly and infants in any shelter, then everyone else (`planWithPriority` in `server/planner.js`). The Planner shows the tiers. With no registrations the plan is unchanged.
 - **Assumptions:** which shelters are accessible is illustrative (`accessible` in `server/simulator.js`), not surveyed. A person with a mobility or medical need who finds no free accessible bed stays unassigned; the planner does not fall back to a shelter they cannot use.
 - **Evaluation:** `node experiments/priority.js` compares this with the single-stage plan on the same 1,600 scenarios, assuming 8% of evacuating residents are vulnerable (an assumption, not a measurement). See `experiments/results/priority.md`.
+
+## Shelter check-in
+
+In 2015, some Chennai relief camps overflowed while others nearby sat empty, because nobody knew who was where. Shelter occupancy can now come from real check-ins instead of the simulation.
+
+- **Modes:** the admin switch on the Relief Shelters page sets the occupancy source. *Simulated* keeps the random drift that rises while the linked zone has an incident. *Live check-ins* sets each shelter's occupancy to the people currently checked in. Routing and the planners already read occupancy, so a full shelter drops out of new routes and plans automatically.
+- **QR flow:** each shelter has a secret token. Staff open "Check-in QR" on the Relief Shelters page, download the PNG and print it at the shelter. Scanning it opens `/checkin/<shelter>?t=<token>`, where a household enters its size (1 to 15) and checks in. The page shows a household code; leaving, the same device checks out with the same code. A full shelter returns a message with the nearest shelters that have free beds. "Rotate code" (admin) replaces the token, so posters already printed stop working.
+- **Privacy:** a household is a random id and a headcount. No names, phone numbers or addresses are stored, and staff see only households and people per shelter. Check-ins and check-outs are audited without the id. Because the token is on the poster, check-ins need physical presence at the shelter.
+- **Limits:** the token is printed in the URL, so it can appear in server access logs. A person who has the poster can check in any group until the shelter is full. Check-ins are accepted in either mode; the capacity check uses the check-in count, while the displayed beds follow the selected occupancy mode.
+- **Endpoints:** `PUT /api/shelters/mode`, `GET /api/shelters/tokens`, `POST /api/shelters/:id/token`, and the public `POST /api/shelters/:id/checkin` and `POST /api/shelters/:id/checkout`. Logic and tests are in `server/checkin.js` and `server/checkin.test.js`.
 
 ## Blockchain audit anchoring
 
