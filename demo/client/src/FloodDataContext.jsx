@@ -10,6 +10,12 @@ const FloodDataContext = createContext(null);
 
 const fmtTime = (ts) => new Date(ts).toLocaleTimeString();
 
+// replay times are IST wall-clock labels ("2023-12-04 14:00"); format them in UTC so the browser's zone never shifts them
+export function formatIst(label) {
+  const d = new Date(Date.parse(`${label.replace(" ", "T")}Z`));
+  return `${d.toLocaleString("en-GB", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })} IST`;
+}
+
 async function api(path, method, body) {
   const res = await fetch(`${SERVER_URL}${path}`, {
     method,
@@ -56,6 +62,7 @@ export function FloodDataProvider({ children }) {
   const snapshotTimer = useRef(null);
   const [rescues, setRescues] = useState([]); // boat rescue requests, staff only
   const [boats, setBoats] = useState([]); // volunteer boats, staff only
+  const [timeMachine, setTimeMachine] = useState({ active: false }); // flood time machine replay status
 
   const pushToast = useCallback((toast) => {
     const id = Date.now() + Math.random();
@@ -104,6 +111,7 @@ export function FloodDataProvider({ children }) {
         setRainfall(s.rainfall ?? null);
         setRainLinkState(s.rainLink ?? true);
         setOfflineSensors(s.offlineSensors ?? []);
+        setTimeMachine(s.timemachine ?? { active: false });
         setOffline(false);
       })
       .catch(() => {
@@ -192,6 +200,7 @@ export function FloodDataProvider({ children }) {
     }));
     socket.on("rain-link-updated", ({ rainLink: on }) => setRainLinkState(on));
     socket.on("sensors-offline", setOfflineSensors);
+    socket.on("timemachine", setTimeMachine);
     socket.on("rescue-requested", (r) => {
       upsert(setRescues)(r);
       pushToast({ kind: "danger", title: "Boat rescue request", text: `${r.zoneName}: ${r.people} people${r.needs.length ? ` (${r.needs.join(", ")})` : ""}`, link: "/rescue" });
@@ -219,7 +228,7 @@ export function FloodDataProvider({ children }) {
   });
 
   const value = {
-    locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts, rainfall, rainLink, liveAudit, liveAnchors, offlineSensors, offline, online, snapshotAt, rescues, boats,
+    locations, history, trend, incidents, reports, broadcasts, shelters, teams, thresholds, connected, toasts, rainfall, rainLink, liveAudit, liveAnchors, offlineSensors, offline, online, snapshotAt, rescues, boats, timeMachine,
     pushToast,
     dismissToast,
     submitReport: (body) => api("/api/citizen-report", "POST", body),
@@ -249,6 +258,9 @@ export function FloodDataProvider({ children }) {
     markRescued: (id) => call(api(`/api/rescue/${id}/rescued`, "POST", {})),
     registerBoat: (body) => call(api("/api/boats", "POST", body)),
     updateBoat: (id, body) => call(api(`/api/boats/${id}`, "PATCH", body)),
+    fetchTimeMachine: () => call(api("/api/timemachine", "GET")),
+    startTimeMachine: (body) => call(api("/api/timemachine/start", "POST", body)).then(setTimeMachine),
+    stopTimeMachine: () => call(api("/api/timemachine/stop", "POST", {})).then(setTimeMachine),
   };
 
   return <FloodDataContext.Provider value={value}>{children}</FloodDataContext.Provider>;

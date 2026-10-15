@@ -22,6 +22,7 @@ import Planner from "./pages/Planner";
 import Rescue from "./pages/Rescue";
 import Audit from "./pages/Audit";
 import Reservoirs from "./pages/Reservoirs";
+import TimeMachine from "./pages/TimeMachine";
 import "./App.css";
 
 export default function App() {
@@ -50,6 +51,7 @@ export default function App() {
               <Route path="accountability" element={<Accountability />} />
               <Route path="architecture" element={<Architecture />} />
               <Route path="settings" element={<RequireAuth roles={["admin"]}><Settings /></RequireAuth>} />
+              <Route path="time-machine" element={<RequireAuth roles={["admin"]}><TimeMachine /></RequireAuth>} />
               <Route path="audit" element={<RequireAuth roles={["admin"]}><Audit /></RequireAuth>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

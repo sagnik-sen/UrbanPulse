@@ -219,6 +219,7 @@ a.feed-item:hover { background: #1c1c1a; }
 .source-tag { font-size: 9.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.03em; }
 .source-tag.auto { background: #16233a; color: #7fb2f0; }
 .source-tag.manual { background: #2c2c2a; color: #c3c2b7; }
+.source-tag.replay { background: #3a1414; color: #ff9b9b; }
 
 /* Tabs */
 .tabs { display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid #2c2c2a; }

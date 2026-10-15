@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { useFloodData } from "./FloodDataContext";
+import { useFloodData, formatIst } from "./FloodDataContext";
 import ReportModal from "./ReportModal";
 import Toasts from "./Toasts";
 import { useAuth, ROLE_LABEL } from "./AuthContext";
 
 export default function Layout() {
-  const { connected, incidents, reports, rescues } = useFloodData();
+  const { connected, incidents, reports, rescues, timeMachine, stopTimeMachine, pushToast } = useFloodData();
   const { user, logout, can } = useAuth();
   const navigate = useNavigate();
   const [now, setNow] = useState(Date.now());
@@ -35,6 +35,7 @@ export default function Layout() {
     { to: "/analytics", label: "Analytics" },
     { to: "/accountability", label: "Accountability" },
     { to: "/architecture", label: "Architecture" },
+    can.manage && { to: "/time-machine", label: "Time Machine" },
     can.manage && { to: "/audit", label: "Audit Log" },
     can.manage && { to: "/settings", label: "Settings" },
   ].filter(Boolean);
@@ -78,6 +79,12 @@ export default function Layout() {
       </aside>
 
       <div className="main">
+        {timeMachine.active && (
+          <div role="status" style={{ background: "#b42318", color: "#fff", padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, fontWeight: 600 }}>
+            <span>REPLAY: {timeMachine.name} · {formatIst(timeMachine.currentTime)} — alerts below are a simulation of a past event</span>
+            {can.manage && <button className="btn" onClick={() => stopTimeMachine().catch((err) => pushToast({ kind: "danger", title: "Could not stop the replay", text: err.message }))}>Stop replay</button>}
+          </div>
+        )}
         <header className="topbar">
           <div>
             <h1>Flood Risk Command Center</h1>

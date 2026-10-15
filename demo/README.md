@@ -115,6 +115,15 @@ Every official alert stores a machine-readable `reason` next to its text: which 
 - `evacuation-order`: an evacuation order (shelters and the number of people assigned from the zone)
 - `reservoir-release`: a reservoir release (reservoir, river, cusecs, duration)
 
+## Flood time machine
+
+An admin can replay a past flood through the live system: Cyclone Michaung (December 2023) or the Chennai floods (November–December 2015). The replay feeds each hour of the event's real rainfall (`server/experiments/data/`) into the same zone model, IMD 24-hour rules and incident and alert paths as live data, and for 2015 it issues the Chembarambakkam release (29,000 cusecs) at its documented time. Open **Time Machine** in the sidebar (admins only), pick an event and a speed, and press **Start replay**. A red banner shows on every staff page while it runs; **Stop replay** ends it early, and it ends by itself at the end of the data.
+
+Each event covers 216 hours, from 00:00 IST two days before the flood day to the end of its data. At each speed a full replay takes: 10 simulated minutes per 2-second tick, 43.2 min; 30, 14.4 min; 60, 7.2 min; 120, 3.6 min.
+
+- Every replay alert is prefixed `[REPLAY <event> <IST time>]` and sent with source `replay`, so it cannot pass for a live alert. Replay alerts, incidents and audit entries are real records: they are anchored on the blockchain like any other, and cannot be removed from it.
+- Limits to know before presenting: rainfall is ERA5 reanalysis, which underestimates peak totals (see `experiments/results/replay.md`). The replay runs the live zone model, including its daily sinusoidal base level, so its alert times differ from the experiment's Model A (for Michaung, Velachery's first danger alert is 3 December 21:00 here and 02:00 in Model A). The forecast 24-hour alerts use the observed next 24 hours, so they show what a perfect forecast would have triggered. The 2015 officialWarning time is not modelled. Incidents are not labelled, only alerts and audit entries. A server restart ends a running replay.
+
 ## Evacuation experiment
 
 ```bash

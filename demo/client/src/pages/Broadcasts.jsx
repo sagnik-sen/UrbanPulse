@@ -140,7 +140,7 @@ export default function Broadcasts() {
             <div key={b.id} className="feed-item" style={{ borderLeft: `3px solid ${SEV_COLOR[b.severity] ?? SEV_COLOR.info}` }}>
               <div style={{ flex: 1 }}>
                 <div className="feed-meta">
-                  <span className={`source-tag ${b.source}`}>{b.source === "auto" ? "AUTOMATED" : "MANUAL"}</span>
+                  <span className={`source-tag ${b.source}`}>{{ auto: "AUTOMATED", replay: "REPLAY" }[b.source] ?? "MANUAL"}</span>
                   <span>{b.zoneName}</span>
                   <span>·</span>
                   <span>{b.channels.map((c) => CHANNEL_LABEL[c]).join(", ")}</span>

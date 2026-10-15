@@ -33,6 +33,8 @@ const ACTIONS = {
   shelter_checkout: { label: "Shelter check-out", tone: "neutral" },
   shelter_mode: { label: "Shelter occupancy mode", tone: "warn" },
   shelter_token_rotated: { label: "Shelter check-in code replaced", tone: "warn" },
+  timemachine_started: { label: "Replay started", tone: "warn" },
+  timemachine_stopped: { label: "Replay stopped", tone: "neutral" },
 };
 
 // who acts when no staff member is signed in
@@ -54,7 +56,9 @@ function describe(e) {
     case "broadcast_sent": return `${d.severity} alert to ${d.zone} via ${(d.channels || []).join(", ")} (~${d.recipients?.toLocaleString("en-IN")} people): "${d.message}"`;
     case "evacuation_order": return `${(d.zones || []).join(", ")}: ${d.heldSeats} seats held${d.unassigned ? `, ${d.unassigned} without a bed` : ""} (${(d.shelters || []).join("; ")})`;
     case "demo_data_cleared": return "Cleared all reports, incidents and broadcasts";
-    case "alert_published": return `${d.code}: ${d.severity} ${d.source === "auto" ? "automated" : "manual"} alert to ${d.zone}: "${d.message}"`;
+    case "alert_published": return `${d.code}: ${d.severity} ${{ auto: "automated", replay: "replayed" }[d.source] ?? "manual"} alert to ${d.zone}: "${d.message}"`;
+    case "timemachine_started": return `${d.label} replay from ${d.startTime} (${d.minutesPerTick} simulated min per tick)`;
+    case "timemachine_stopped": return `${d.label} replay stopped at ${d.currentTime} (${Math.round((d.progress ?? 0) * 100)}% played${d.reason ? `, ${d.reason}` : ""})`;
     case "rain_link": return d.enabled ? "Linked simulation to live rainfall" : "Unlinked simulation from live rainfall";
     case "incident_opened": return `${d.zone} reached ${d.level}%`;
     case "incident_cleared": return `${d.zone} back to ${d.level}% (${d.how})`;

@@ -20,6 +20,7 @@ const { buildTimelines, summarize } = require("./accountability");
 const { fusedZones } = require("./fusion-live");
 const { RESERVOIRS, releaseImpact } = require("./reservoirs");
 const { matchOptimal, matchGreedy, validateRequest, validateBoat, validateBoatPatch, publicRequest, requestStatus, demoBoats, MATCH_METHODS } = require("./rescue");
+const { EVENTS, loadEvent, createReplay, listEvents } = require("./timemachine");
 const { rateLimit } = require("./ratelimit");
 const { occupied, checkIn, checkOut, tokenMatches, newToken } = require("./checkin");
 
@@ -193,6 +194,12 @@ function currentSnapshot() {
 
 const MESSAGE_MAX = 300;
 function addBroadcast({ zoneId, severity, message, channels, source, reason }) {
+  // alerts issued during a replay are labelled and marked, so a simulated alert cannot pass for a live one
+  const replayed = replay !== null;
+  if (replayed) {
+    message = replayTag() + message;
+    source = "replay";
+  }
   const zone = LOCATIONS.find((l) => l.id === zoneId);
   const recipients = zone ? zone.population : LOCATIONS.reduce((s, l) => s + l.population, 0);
   const id = randomUUID();
@@ -206,7 +213,7 @@ function addBroadcast({ zoneId, severity, message, channels, source, reason }) {
   saveBroadcast(b);
   io.emit("broadcast", b);
   // public record with no staff identity, so its blockchain proof can be handed to anyone
-  audit(null, "alert_published", { code, zoneId, zone: b.zoneName, severity, message, channels, source, reason });
+  audit(null, "alert_published", { code, zoneId, zone: b.zoneName, severity, message, channels, source, reason, ...(replayed ? { replay: true } : {}) });
   return b;
 }
 
@@ -260,13 +267,55 @@ function updateShelters() {
   io.emit("shelters-update", SHELTERS);
 }
 
+// ---- Flood time machine (timemachine.js) ----------------------------------------
+// While a replay runs, the live rainfall feed is ignored and each 2-minute step applies the
+// replayed hour's rain with the same storm rule as live. The replay is a real run of the system.
+let replay = null; // the running replay, or null when the system follows live rainfall
+let replayHour = null; // the hour whose 24 h totals were last checked against the IMD rules
+const replayTag = () => `[REPLAY ${replay.status().short} ${replay.currentTime} IST] `;
+const timeMachineStatus = () => (replay ? replay.status() : { active: false });
+
+function replayStep() {
+  // exactly Model A of experiments/replay.js (decay, then add rain; no daily cycle, bursts or noise), so a live replay matches replay.md
+  for (const z of LOCATIONS) z.storm = z.storm * 0.97 + replay.rainAt(z.id) * RAIN_LEVEL_PER_MM;
+  stepZones(LOCATIONS, t, () => 0.5, { stormDecay: 1, oscillate: false }); // rng 0.5 = no burst and no noise
+  replay.advance(2);
+  for (const ev of replay.dueEvents()) releaseReservoirForReplay(ev);
+  if (replay.hourIndex !== replayHour) {
+    replayHour = replay.hourIndex;
+    runReplayRainfall();
+  }
+}
+
+// the IMD 24 h rules on the replayed totals, with their own state so live alerts are not affected
+function runReplayRainfall() {
+  const imd = imdAlerts(db.getSetting("imdAlertStateReplay", {}), LOCATIONS, replay.rainfall(), Date.now());
+  db.setSetting("imdAlertStateReplay", imd.state);
+  for (const a of imd.alerts) addBroadcast({ zoneId: a.zoneId, severity: a.severity, message: a.message, channels: ["sms", "push"], source: "auto", reason: a.reason });
+  io.emit("rainfall-update", rainfallView());
+}
+
+function stopReplay(actor, reason) {
+  const ended = replay.status();
+  replay = null;
+  replayHour = null;
+  for (const z of LOCATIONS) { z.storm = 0; z.surge = 0; }
+  audit(actor, "timemachine_stopped", { event: ended.event, label: ended.label, currentTime: ended.currentTime, progress: Math.round(ended.progress * 1000) / 1000, reason });
+  toStaff("timemachine", { active: false });
+}
+
 function tick() {
   t += 1;
-  const rain = rainfall.get();
-  if (rainLink && !rain.stale) {
-    for (const z of LOCATIONS) z.storm += (rain.zones[z.id]?.currentMmPerHr || 0) * RAIN_LEVEL_PER_MM;
+  if (replay) {
+    for (let k = replay.minutesPerTick / 2; k > 0 && !replay.done; k--) replayStep();
+    if (replay.done) stopReplay(null, "finished");
+  } else {
+    const rain = rainfall.get();
+    if (rainLink && !rain.stale) {
+      for (const z of LOCATIONS) z.storm += (rain.zones[z.id]?.currentMmPerHr || 0) * RAIN_LEVEL_PER_MM;
+    }
+    stepZones(LOCATIONS, t, Math.random);
   }
-  stepZones(LOCATIONS, t, Math.random);
 
   const payload = currentSnapshot();
   payload.forEach((p) => {
@@ -278,19 +327,20 @@ function tick() {
   io.emit("sensor-update", payload);
   updateIncidents(payload);
   updateShelters();
+  if (replay) toStaff("timemachine", replay.status());
 }
 
 setInterval(tick, 2000);
 
 const rainfall = createRainfallFeed(LOCATIONS);
 function rainfallView() {
-  const state = rainfall.get();
+  const state = replay ? replay.rainfall() : rainfall.get(); // during a replay the clients see the replayed rain
   return { ...state, zones: withCategories(state.zones) };
 }
 async function refreshRainfall() {
   const state = await rainfall.refresh();
   if (state.error) console.warn(`rainfall refresh failed: ${state.error}`);
-  if (!state.stale) {
+  if (!state.stale && !replay) {
     const imd = imdAlerts(db.getSetting("imdAlertState", {}), LOCATIONS, state, Date.now());
     db.setSetting("imdAlertState", imd.state);
     for (const a of imd.alerts) addBroadcast({ zoneId: a.zoneId, severity: a.severity, message: a.message, channels: ["sms", "push"], source: "auto", reason: a.reason });
@@ -326,11 +376,11 @@ app.get("/api/auth/me", (req, res) => {
 
 // citizen app: live levels, shelters, public alerts; nothing with reporter names or dispatch details
 app.get("/api/public-state", (req, res) => {
-  res.json({ locations: currentSnapshot(), broadcasts, shelters: SHELTERS, shelterMode, thresholds, rainfall: rainfallView(), rainLink });
+  res.json({ locations: currentSnapshot(), broadcasts, shelters: SHELTERS, shelterMode, thresholds, rainfall: rainfallView(), rainLink, timemachine: timeMachineStatus() });
 });
 
 app.get("/api/state", requireRole(...STAFF), (req, res) => {
-  res.json({ locations: currentSnapshot(), history, incidents, reports: citizenReports, broadcasts, shelters: SHELTERS, shelterMode, shelterCheckins: checkinSummary(), teams: TEAMS, thresholds, rainfall: rainfallView(), rainLink, offlineSensors: [...offlineSensors] });
+  res.json({ locations: currentSnapshot(), history, incidents, reports: citizenReports, broadcasts, shelters: SHELTERS, shelterMode, shelterCheckins: checkinSummary(), teams: TEAMS, thresholds, rainfall: rainfallView(), rainLink, offlineSensors: [...offlineSensors], timemachine: timeMachineStatus() });
 });
 
 app.put("/api/thresholds", requireRole("admin"), (req, res) => {
@@ -351,6 +401,34 @@ app.put("/api/settings/rain-link", requireRole("admin"), (req, res) => {
   audit(req.user, "rain_link", { enabled: rainLink });
   io.emit("rain-link-updated", { rainLink });
   res.json({ rainLink });
+});
+
+// ---- Flood time machine routes ----------------------------------------------------
+// Staff can watch; only admins start or stop a replay. Replay alerts go through addBroadcast and are labelled.
+app.get("/api/timemachine", requireRole(...STAFF), (req, res) => {
+  res.json({ status: timeMachineStatus(), events: listEvents() });
+});
+
+app.post("/api/timemachine/start", requireRole("admin"), (req, res) => {
+  const { event, minutesPerTick = 30 } = req.body || {};
+  if (!Object.hasOwn(EVENTS, event)) return res.status(400).json({ error: "Pick a known event" });
+  if (!Number.isInteger(minutesPerTick) || minutesPerTick < 10 || minutesPerTick > 120 || minutesPerTick % 2) {
+    return res.status(400).json({ error: "Speed must be an even number of simulated minutes from 10 to 120" });
+  }
+  if (replay) return res.status(409).json({ error: "A replay is already running" });
+  replay = createReplay(loadEvent(event), { minutesPerTick });
+  for (const z of LOCATIONS) { z.storm = 0; z.surge = 0; }
+  db.setSetting("imdAlertStateReplay", {});
+  audit(req.user, "timemachine_started", { event, label: replay.status().label, minutesPerTick, startTime: replay.currentTime });
+  replayHour = replay.hourIndex;
+  runReplayRainfall();
+  toStaff("timemachine", replay.status());
+  res.json(timeMachineStatus());
+});
+
+app.post("/api/timemachine/stop", requireRole("admin"), (req, res) => {
+  if (replay) stopReplay(req.user, "stopped by admin");
+  res.json(timeMachineStatus());
 });
 
 app.post("/api/simulate/storm", requireRole("admin"), (req, res) => {
@@ -946,24 +1024,34 @@ app.post("/api/reservoirs/release", requireRole(...RESPONDERS), (req, res) => {
   const note = typeof reason === "string" ? reason.trim() : "";
   if (note.length < 3 || note.length > 200) return res.status(400).json({ error: "Give a reason of 3 to 200 characters" });
 
+  releaseReservoir(reservoir, { cusecs, durationHours, reason: note }, req.user);
+  res.json({ ok: true, alerts: reservoir.downstream.length });
+});
+
+// the release's effect, shared by the desk and the time machine; durationHours null means not documented
+function releaseReservoir(reservoir, { cusecs, durationHours, reason }, actor, extra = {}) {
   const zoneNames = reservoir.downstream.map((id) => LOCATIONS.find((l) => l.id === id).name);
-  audit(req.user, "reservoir_release", { reservoirId: reservoir.id, reservoir: reservoir.name, cusecs, durationHours, reason: note, downstream: zoneNames });
+  audit(actor, "reservoir_release", { reservoirId: reservoir.id, reservoir: reservoir.name, cusecs, durationHours, reason, downstream: zoneNames, ...extra });
   const impact = releaseImpact(cusecs);
   for (const zoneId of reservoir.downstream) {
     injectStorm(LOCATIONS, zoneId, impact);
     addBroadcast({
       zoneId,
       severity: "warning",
-      message: `RESERVOIR RELEASE: ${cusecs} cusecs from ${reservoir.name} for ${durationHours} h. ${reservoir.river} river will rise. Stay away from riverbanks and low bridges.`,
+      message: `RESERVOIR RELEASE: ${cusecs} cusecs from ${reservoir.name}${durationHours == null ? "" : ` for ${durationHours} h`}. ${reservoir.river} river will rise. Stay away from riverbanks and low bridges.`,
       channels: ["sms", "push"],
       source: "manual",
       reason: { rule: "reservoir-release", reservoir: reservoir.name, river: reservoir.river, cusecs, durationHours },
     });
   }
-  res.json({ ok: true, alerts: reservoir.downstream.length });
-});
+}
 
-const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared", "sensor_status", "reservoir_release", "rescue_requested", "rescue_assigned", "rescue_completed", "rescue_cancelled", "boat_registered", "boat_updated", "vulnerable_registered", "vulnerable_cancelled", "shelter_mode", "shelter_token_rotated", "shelter_checkin", "shelter_checkout"]);
+function releaseReservoirForReplay(ev) {
+  const reservoir = RESERVOIRS.find((r) => r.id === ev.reservoir);
+  releaseReservoir(reservoir, { cusecs: ev.cusecs, durationHours: null, reason: "Documented release, replayed from the official timeline" }, null, { replay: true });
+}
+
+const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared", "sensor_status", "reservoir_release", "rescue_requested", "rescue_assigned", "rescue_completed", "rescue_cancelled", "boat_registered", "boat_updated", "vulnerable_registered", "vulnerable_cancelled", "shelter_mode", "shelter_token_rotated", "shelter_checkin", "shelter_checkout", "timemachine_started", "timemachine_stopped"]);
 
 app.get("/api/audit", requireRole("admin"), (req, res) => {
   const action = AUDIT_ACTIONS.has(req.query.action) ? req.query.action : undefined;
