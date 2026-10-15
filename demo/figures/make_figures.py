@@ -141,12 +141,47 @@ def md_rows(name, heading):
 
 def parse_pm(cell):
     mean_text, ci_text = cell.split(" ± ")
-    return float(mean_text), float(ci_text)
+    return float(mean_text), float(ci_text.split()[0])
 
 
 def assert_close(a, b, tol, what):
     if abs(a - b) > tol:
         raise AssertionError(f"{what}: figure value {a} differs from committed table value {b}")
+
+
+def check_pm(cell, m, ci, n, dec, what):
+    """A plotted mean, CI and sample size must match the committed 'mean ± CI (n=...)' cell."""
+    committed, committed_ci = parse_pm(cell)
+    assert_close(round(m, dec), committed, 10 ** -dec, what)
+    assert_close(round(ci, dec), committed_ci, 10 ** -dec, f"{what} CI")
+    if "(n=" in cell:
+        committed_n = int(cell.rsplit("(n=", 1)[1].rstrip(")"))
+        if committed_n != n:
+            raise AssertionError(f"{what}: figure uses n={n}, committed table says n={committed_n}")
+
+
+def group_stats(rows, field, key, metric):
+    """Mean and 95% CI over the rows whose `field` equals `key`; empty cells (no value) are skipped."""
+    return mean_ci([float(r[metric]) for r in rows if r[field] == key and r[metric] != ""])
+
+
+def grouped_bars(ax, groups, arms, values, dec):
+    """values[arm][group] = (mean, ci). Bars side by side within each group, value labels above."""
+    width = 0.8 / len(arms)
+    for j, (_, label, color, hatch) in enumerate(arms):
+        xs = [i + (j - (len(arms) - 1) / 2) * width for i in range(len(groups))]
+        ms = [v[0] for v in values[j]]
+        cis = [v[1] for v in values[j]]
+        ax.bar(
+            xs, ms, width=width * 0.92, color=color, hatch=hatch, edgecolor=BLACK, linewidth=0.5,
+            yerr=cis, ecolor=BLACK, error_kw={"elinewidth": 0.6, "capsize": 1.5}, label=label,
+        )
+        for x, m, ci in zip(xs, ms, cis):
+            ax.annotate(f"{m:.{dec}f}", xy=(x, m + ci), xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=6.5)
+    ax.set_xticks(range(len(groups)))
+    ax.set_xticklabels(groups)
+    ax.set_xlim(-0.6, len(groups) - 0.4)
+    grid(ax, "y")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -479,6 +514,106 @@ def fig_chain_latency():
     save(fig, "fig_chain_latency")
 
 
+# ---------------------------------------------------------------------------------------------
+# Figure 7: volunteer boat rescue dispatch (rescue.js)
+# ---------------------------------------------------------------------------------------------
+RESCUE_ARMS = [("greedy", "Greedy first-come", GREY, "//"), ("optimal", "Optimal batch (proposed)", BLUE, None)]
+RESCUE_WAITS = [("meanWait", "Mean"), ("p90Wait", "p90"), ("medicalMeanWait", "Medical need")]
+# column of the policy table under "## Results" in rescue.md, and decimals as printed there
+RESCUE_MD_COLUMN = {"meanWait": (1, 1), "p90Wait": (2, 1), "medicalMeanWait": (3, 1), "pctNotReached": (4, 2)}
+
+
+def fig_rescue():
+    rows = read_rows("rescue.csv")
+    md = md_rows("rescue.md", "## Results")
+    assert md[0][0].startswith("Greedy") and md[1][0].startswith("Optimal"), "rescue.md policy rows changed"
+    stats = {}
+    for (key, *_), row in zip(RESCUE_ARMS, md):
+        for metric, (col, dec) in RESCUE_MD_COLUMN.items():
+            m, ci, n = group_stats(rows, "policy", key, metric)
+            check_pm(row[col], m, ci, n, dec, f"rescue {key} {metric}")
+            stats[(key, metric)] = (m, ci)
+
+    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(SINGLE_W, 2.6), gridspec_kw={"width_ratios": [2.4, 1]}, layout="constrained")
+    waits = [[stats[(key, metric)] for metric, _ in RESCUE_WAITS] for key, *_ in RESCUE_ARMS]
+    grouped_bars(ax_a, [label for _, label in RESCUE_WAITS], RESCUE_ARMS, waits, 0)
+    ax_a.set_ylabel("Wait to boat (min)")
+    ax_a.set_ylim(0, 300)
+    ax_a.set_title("(a)", fontsize=8, loc="left")
+    pct = [[stats[(key, "pctNotReached")]] for key, *_ in RESCUE_ARMS]
+    grouped_bars(ax_b, ["Not reached\nin 6 h"], RESCUE_ARMS, pct, 1)
+    ax_b.set_ylabel("Requests (%)")
+    ax_b.set_ylim(0, 100)
+    ax_b.set_title("(b)", fontsize=8, loc="left")
+    handles, labels = ax_a.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="outside upper center", ncol=2)
+    save(fig, "fig_rescue")
+
+
+# ---------------------------------------------------------------------------------------------
+# Figure 8: walk-in versus scheduled ration collection (relief.js)
+# ---------------------------------------------------------------------------------------------
+RELIEF_ARMS = [("walk-in", "Walk-in", GREY, "//"), ("scheduled", "Scheduled slots (proposed)", BLUE, None)]
+RELIEF_MD_COLUMN = {"meanWait": 1, "p90Wait": 2, "maxQueue": 3}
+
+
+def fig_relief():
+    rows = read_rows("relief.csv")
+    md = md_rows("relief.md", "## Results")
+    assert [r[0] for r in md] == ["walk-in", "scheduled"], "relief.md arm rows changed"
+    stats = {}
+    for (key, *_), row in zip(RELIEF_ARMS, md):
+        for metric, col in RELIEF_MD_COLUMN.items():
+            m, ci, n = group_stats(rows, "arm", key, metric)
+            check_pm(row[col], m, ci, n, 1, f"relief {key} {metric}")
+            stats[(key, metric)] = (m, ci)
+
+    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(SINGLE_W, 2.6), gridspec_kw={"width_ratios": [2, 1]}, layout="constrained")
+    waits = [("meanWait", "Mean wait"), ("p90Wait", "p90 wait")]
+    grouped_bars(ax_a, [label for _, label in waits], RELIEF_ARMS, [[stats[(key, metric)] for metric, _ in waits] for key, *_ in RELIEF_ARMS], 0)
+    ax_a.set_ylabel("Queue wait (min)")
+    ax_a.set_ylim(0, 450)
+    ax_a.set_title("(a)", fontsize=8, loc="left")
+    queue = [[stats[(key, "maxQueue")]] for key, *_ in RELIEF_ARMS]
+    grouped_bars(ax_b, ["Max queue"], RELIEF_ARMS, queue, 0)
+    ax_b.set_ylabel("People waiting")
+    ax_b.set_ylim(0, 750)
+    ax_b.set_title("(b)", fontsize=8, loc="left")
+    handles, labels = ax_a.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="outside upper center", ncol=2)
+    save(fig, "fig_relief")
+
+
+# ---------------------------------------------------------------------------------------------
+# Figure 9: vulnerable-first bed allocation under bed scarcity (priority.js --bed-scale 0.25)
+# ---------------------------------------------------------------------------------------------
+PRIORITY_ARMS = [("proposed", "Everyone equal (proposed, baseline)", GREY, "//"), ("priority", "Vulnerable first", BLUE, None)]
+# (group key, CSV column, label, column of the "All scenarios" policy table in priority-stress.md)
+PRIORITY_GROUPS = [("vul", "vulPctWithoutBed", "Vulnerable residents", 2), ("gen", "genPctWithoutBed", "General residents", 5)]
+
+
+def fig_priority():
+    rows = read_rows("priority-stress.csv")
+    md = md_rows("priority-stress.md", "## All scenarios")
+    assert md[0][0].startswith("Proposed") and md[1][0].startswith("Vulnerable first"), "priority-stress.md policy rows changed"
+    assert "`--bed-scale 0.25`" in (RESULTS / "priority-stress.md").read_text(encoding="utf-8")
+    stats = {}
+    for (key, *_), row in zip(PRIORITY_ARMS, md):
+        for group, metric, _, col in PRIORITY_GROUPS:
+            m, ci, _ = group_stats(rows, "policy", key, metric)
+            check_pm(row[col], m, ci, None, 2, f"priority {key} {metric}")
+            stats[(key, group)] = (m, ci)
+
+    fig, ax = plt.subplots(figsize=(SINGLE_W, 2.6), layout="constrained")
+    values = [[stats[(key, group)] for group, *_ in PRIORITY_GROUPS] for key, *_ in PRIORITY_ARMS]
+    grouped_bars(ax, [label for _, _, label, _ in PRIORITY_GROUPS], PRIORITY_ARMS, values, 1)
+    ax.set_ylabel("Without a bed (%)")
+    ax.set_ylim(0, 100)
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="outside upper center", ncol=2)
+    save(fig, "fig_priority")
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     fig_evacuation()
@@ -487,7 +622,13 @@ def main():
     fig_tamper()
     fig_scale()
     fig_chain_latency()
-    names = ["fig_evacuation", "fig_fusion", "fig_replay_michaung", "fig_tamper", "fig_scale", "fig_chain_latency"]
+    fig_rescue()
+    fig_relief()
+    fig_priority()
+    names = [
+        "fig_evacuation", "fig_fusion", "fig_replay_michaung", "fig_tamper", "fig_scale", "fig_chain_latency",
+        "fig_rescue", "fig_relief", "fig_priority",
+    ]
     files = [OUT / f"{n}.{ext}" for n in names for ext in ("pdf", "png")]
     missing = [str(p) for p in files if not p.exists()]
     if missing:

@@ -2,7 +2,10 @@
 // against the proposed policy with everyone treated equally (forecast-aware costs, single-stage
 // optimal assignment, the policy in experiments/run.js).
 //
-//   node experiments/priority.js [--seeds 200] [--out priority]
+//   node experiments/priority.js [--seeds 200] [--out priority] [--bed-scale 1]
+//
+// --bed-scale x multiplies every shelter's capacity by x (rounded down, minimum 1) before planning.
+// Occupancy is drawn from the unscaled capacity, as in run.js, so the random draws do not change.
 //
 // Same scenarios as run.js: same seeds, storms, water, departure schedules, shelters (with the same
 // occupancy draws) and committed road routes (routes.json). run.js runs its experiment when loaded
@@ -21,6 +24,8 @@ const { summarize } = require("../vulnerable");
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => (a.startsWith("--") ? [...acc, [a.slice(2), all[i + 1]]] : acc), []));
 const SEEDS = Number(args.seeds) || 200;
 const OUT_NAME = args.out || "priority";
+const BED_SCALE = args["bed-scale"] === undefined ? 1 : Number(args["bed-scale"]);
+if (!(BED_SCALE > 0)) throw new Error(`--bed-scale must be a positive number, got ${args["bed-scale"]}`);
 
 // ASSUMPTION (not measured for Chennai): share of each evacuating zone's people who are registered as
 // needing help, with the Census-style split below. Elderly 50%, mobility 25%, medical 15%, infant 10%.
@@ -83,6 +88,7 @@ function buildScenario(seed, type) {
   }
 
   for (const s of shelters) s.occupancy = Math.floor(rng() * 0.6 * s.capacity);
+  for (const s of shelters) s.capacity = Math.max(1, Math.floor(s.capacity * BED_SCALE));
 
   let evacZones = planningView
     .filter((z) => z.risk === "danger" || z.forecast.slice(0, TRIGGER_STEPS).some((p) => p.mean >= DANGER))
@@ -250,12 +256,18 @@ function main() {
   fs.writeFileSync(path.join(outDir, `${OUT_NAME}.csv`), [header.join(","), ...rows.map((r) => header.map((h) => (typeof r[h] === "number" ? +r[h].toFixed(5) : r[h])).join(","))].join("\n") + "\n");
 
   const runs = SEEDS * SCENARIO_TYPES.length * DEPARTURES.length;
+  const unscaledBeds = createShelters().reduce((s, sh) => s + sh.capacity, 0);
+  const scaledBeds = createShelters().reduce((s, sh) => s + Math.max(1, Math.floor(sh.capacity * BED_SCALE)), 0);
   const lines = [
     `# Priority evacuation experiment (${OUT_NAME})`,
     "",
     `${SEEDS} seeds × ${SCENARIO_TYPES.length} scenario types × ${DEPARTURES.length} departure modes = ${runs} scenario runs, each planned both ways. Same scenarios as \`results.md\` (seeds, water, shelters, routes); storm decay per tick: ${STORM_DECAY}.`,
     "Plans use only information available at planning time (the same forecast risk model for both). Values: mean ± 95% CI over scenario runs, as in results.md.",
     "",
+    ...(BED_SCALE === 1 ? [] : [
+      `**Bed-scale stress variant (\`--bed-scale ${BED_SCALE}\`).** Every shelter's capacity is multiplied by ${BED_SCALE} (rounded down, minimum 1), giving ${scaledBeds} beds in total against ${unscaledBeds} unscaled. Occupancy is the unchanged draw from the unscaled capacity, so shelters can start full. The scale ${BED_SCALE} was chosen before running, so that beds are clearly short; it was not tuned after seeing results. All other assumptions are as in the committed run.`,
+      "",
+    ]),
     "## Assumptions",
     "",
     `- **Vulnerable share: ${VULNERABLE_SHARE * 100}% of each evacuating zone's people** (ASSUMPTION, Census-style; not measured for Chennai). Split of the registered people: elderly ${MIX.elderly * 100}%, mobility ${MIX.mobility * 100}%, medical ${MIX.medical * 100}%, infant ${MIX.infant * 100}% (rounded per zone; infant takes the remainder).`,

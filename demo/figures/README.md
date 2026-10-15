@@ -21,6 +21,9 @@ node experiments/fusion.js --seeds 200
 node experiments/tamper.js --seeds 200
 node experiments/replay.js
 node experiments/scale.js
+node experiments/rescue.js
+node experiments/relief.js
+node experiments/priority.js --bed-scale 0.25 --out priority-stress
 ```
 
 Then build the figures from the repository root:
@@ -29,7 +32,7 @@ Then build the figures from the repository root:
 demo/figures/.venv/bin/python demo/figures/make_figures.py
 ```
 
-This writes 12 files to `demo/figures/out/`: each figure as PDF and as 300-dpi PNG.
+This writes 18 files to `demo/figures/out/`: each figure as PDF and as 300-dpi PNG.
 The `.venv` directory is git-ignored.
 
 ## Figures
@@ -42,9 +45,13 @@ The `.venv` directory is git-ignored.
 | `fig_tamper` | Audit-log attacks: share of trials pinpointed to the entry, flagged at batch level, or not detected (200 trials per attack). The control row is omitted; its false-alarm count is in `tamper.md`. | `tamper.js` → `results/tamper.csv` |
 | `fig_scale` | Time per operation (tick, fusion, plan, anchor + verify) vs zones N = 6, 50, 100, 200, log-log, with the 2,000 ms tick budget. | `scale.js` → `results/scale.csv` |
 | `fig_chain_latency` | (a) Send-to-receipt latency per anchor with median and p90; (b) gas used per anchor by batch size (1, 10, 100, 500). | `results/chain-bench.json` (committed testnet measurements) |
+| `fig_rescue` | Volunteer boat rescue (single column): (a) mean, p90 and medical-need mean wait to a boat (min); (b) % of requests not reached within 6 h; greedy first-come vs optimal batch, mean ± 95% CI over 200 seeds. | `rescue.js` → `results/rescue.csv`, checked against `results/rescue.md` |
+| `fig_relief` | Flood relief collection (single column): (a) mean and p90 queue wait (min); (b) max queue length at any shop (people); walk-in vs scheduled slots, mean ± 95% CI over 200 seeds. | `relief.js` → `results/relief.csv`, checked against `results/relief.md` |
+| `fig_priority` | Bed scarcity stress run (single column): % of vulnerable and general residents without a bed, everyone equal vs vulnerable first, mean ± 95% CI over 1,600 scenario runs. Shelter capacity × 0.25. | `priority.js --bed-scale 0.25 --out priority-stress` → `results/priority-stress.csv`, checked against `results/priority-stress.md` |
 
 ## Notes
 
+- `fig_priority` uses the bed-scale stress variant only. At the default scale beds almost never run out (0.00 to 0.01% without a bed under either policy), so the effect is not visible there; see `results/priority.md`.
 - The replay figure's 24 h rolling total starts at 28 Nov 23:00, the first hour with a full 24 h of data.
 - Hourly rainfall bars are placed at their IST hour labels. Whether a label marks the start or the end of the hour is not checked (see `replay.md`).
 - Error bars are 1.96 × sample SD / √n, the same formula the experiment scripts use.
