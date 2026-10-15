@@ -465,8 +465,10 @@ const SEVERITIES = new Set(["low", "medium", "high"]);
 // random per-browser id from the citizen app; it keys reporter trust, so it is never shown publicly
 const DEVICE_ID = /^[0-9a-f-]{36}$/i;
 
+const DEPTHS = new Set(["ankle", "knee", "waist", "chest"]);
+
 app.post("/api/citizen-report", citizenReportLimit, (req, res) => {
-  const { lat, lng, category, severity, description, reporter, deviceId } = req.body;
+  const { lat, lng, category, severity, description, reporter, deviceId, depth } = req.body;
   if (typeof lat !== "number" || typeof lng !== "number" || !description || !String(description).trim()) {
     return res.status(400).json({ error: "lat, lng and description are required" });
   }
@@ -483,6 +485,7 @@ app.post("/api/citizen-report", citizenReportLimit, (req, res) => {
     lng,
     category: CATEGORIES.has(category) ? category : "other",
     severity: SEVERITIES.has(severity) ? severity : "medium",
+    depth: DEPTHS.has(depth) ? depth : null,
     description: String(description).slice(0, 500),
     reporter: reporter ? String(reporter).slice(0, 60) : "Anonymous",
     deviceId: typeof deviceId === "string" && DEVICE_ID.test(deviceId) ? deviceId : null,

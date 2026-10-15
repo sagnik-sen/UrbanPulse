@@ -275,6 +275,28 @@ sent over a real network and the sender's number is not stored. Commands are cas
 
 Area names match an exact name, a prefix, or any part of a zone name, so `SHELTER mar` finds Pallikaranai Marshland.
 
+## Spoken alerts and water depth
+
+**Spoken alerts.** Each official alert on the citizen page has a "Listen" button (Tamil: கேளுங்கள்) that reads it
+with the browser's built-in speech (Web Speech API), so nothing leaves the phone. A second click stops it. The
+"Read new danger alerts aloud" switch in the alerts card reads each new danger alert for the citizen's area
+(including all-zone alerts) once, and is remembered on that phone.
+
+- Voices: in English the app picks an `en-IN` voice, else any English voice. In Tamil it picks a `ta` voice
+  and reads a short Tamil line ("<zone> பகுதிக்கு வெள்ள ஆபத்து எச்சரிக்கை") before the English alert text, which
+  is read by an English voice. The verification code is read last, slowly.
+- **Tamil limitation:** alert text is written in English on the server, so Tamil is only spoken as the short
+  preamble. If the phone has no Tamil voice, the alert is read in English and the page says so.
+- Browsers allow speech only after a tap on the page; the switch counts as that tap. If speech is refused, nothing
+  is read and the alert still shows as text.
+
+**Water depth.** The report form asks how deep the water is, using body references: ankle (~10 cm), knee
+(~50 cm), waist (~100 cm), chest (~130 cm), or "not sure". The server keeps `depth` only from those values
+(anything else is stored as null). Fusion maps depth onto the existing severity levels (`fusion-live.js`,
+`fusionSeverity`): ankle is low, knee medium, waist and chest high. The report's own severity still applies when
+it is higher. `fusion.js` parameters are unchanged. Citizen Reports and the Live Map show the depth
+("Water: knee-deep (~50 cm)").
+
 ## Abuse protection
 
 Public routes (no sign-in) write data or cost a blockchain read, so each one has a fixed-window limit per client IP (`server/ratelimit.js`). A request over the limit gets `429` with a `Retry-After` header.

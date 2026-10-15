@@ -13,10 +13,13 @@ import Toasts from "../Toasts";
 import OfflineBanner, { offlineCheckText } from "../OfflineBanner";
 import SmsDemo from "../SmsDemo";
 import AlertReason from "../AlertReason";
+import SpeakAlert from "../SpeakAlert";
 import { loadSnapshot } from "../offline";
 import { DangerZones, RouteLayer, RouteSummary, useEvacuation } from "../EvacuationRoute";
 
 const AREA_KEY = "urbanpulse.citizen.area";
+const SPEAK_KEY = "urbanpulse.citizen.speakAlerts";
+const SPEAK_TEXT = { en: "Read new danger alerts aloud", ta: "புதிய ஆபத்து எச்சரிக்கைகளை சத்தமாக வாசிக்கவும்" };
 const SEV_COLOR = { info: "#3987e5", warning: "#fab219", danger: "#d03b3b" };
 
 const GUIDANCE = {
@@ -146,6 +149,14 @@ function readSavedArea() {
   }
 }
 
+function readSavedSpeak() {
+  try {
+    return localStorage.getItem(SPEAK_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function forecastText(lang, hours) {
   if (hours == null) return null;
   const minutes = Math.round(hours * 60);
@@ -169,6 +180,7 @@ export default function Citizen() {
   const [locating, setLocating] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [checkRequest, setCheckRequest] = useState(null);
+  const [autoSpeak, setAutoSpeak] = useState(readSavedSpeak);
   const evac = useEvacuation();
   const { planFrom, clear } = evac;
   const autoPlannedFor = useRef(null);
@@ -192,6 +204,15 @@ export default function Citizen() {
     const origin = coords ?? area;
     planFrom(origin.lat, origin.lng);
   }, [area, coords, planFrom]);
+
+  const toggleSpeak = (on) => {
+    setAutoSpeak(on);
+    try {
+      localStorage.setItem(SPEAK_KEY, on ? "1" : "0");
+    } catch {
+      // blocked storage: the toggle still works for this visit
+    }
+  };
 
   const chooseArea = (id) => {
     setAreaId(id);
@@ -306,6 +327,10 @@ export default function Citizen() {
       <section className="c-card">
         <div className="c-card-head"><h2>{t(lang, "alerts.title")}</h2><span className="muted small">{t(lang, "alerts.scope", { area: area.name })}</span></div>
         {lang === "ta" && <p className="muted small" style={{ margin: "0 0 10px" }}>{t(lang, "note.alertsEnglish")}</p>}
+        <label className="small" style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 10px" }}>
+          <input type="checkbox" checked={autoSpeak} onChange={(e) => toggleSpeak(e.target.checked)} />
+          {SPEAK_TEXT[lang]}
+        </label>
         {alerts.length === 0 && <p className="muted small">{t(lang, "alerts.none")}</p>}
         {alerts.map((b) => (
           <div key={b.id} className="c-alert" style={{ borderLeftColor: SEV_COLOR[b.severity] ?? SEV_COLOR.info }}>
@@ -314,6 +339,7 @@ export default function Citizen() {
               <span>{b.zoneName}</span><span>·</span><span>{timeAgoText(lang, b.ts)}</span>
             </div>
             <div className="c-alert-text">{b.message}</div>
+            <SpeakAlert text={b.message} lang={lang} alert={b} auto={autoSpeak} />
             <AlertReason reason={b.reason} lang={lang} />
             {b.code && (
               <div className="c-alert-meta" style={{ marginTop: 6, marginBottom: 0 }}>

@@ -18,6 +18,17 @@ function trustFromReports(reports, deviceId, excludeId) {
   return record;
 }
 
+// depth reports are mapped onto the pre-declared severity levels of fusion.js; fusion.js parameters are unchanged
+const DEPTH_SEVERITY = { ankle: "low", knee: "medium", waist: "high", chest: "high" };
+const RANK = { low: 0, medium: 1, high: 2 };
+
+// the report's own severity wins when it is higher than the one its water depth implies
+function fusionSeverity(r) {
+  const fromDepth = DEPTH_SEVERITY[r.depth];
+  if (!fromDepth) return r.severity;
+  return RANK[fromDepth] > (RANK[r.severity] ?? -1) ? fromDepth : r.severity;
+}
+
 function fusedZones({ zones, reports, offline, now }) {
   const nowTick = tickOf(now);
   const live = reports.filter((r) => r.status !== "rejected");
@@ -31,7 +42,7 @@ function fusedZones({ zones, reports, offline, now }) {
     const reading = offline.has(z.id) ? null : z.level;
     const zoneReports = live
       .filter((r) => r.zoneId === z.id)
-      .map((r) => ({ deviceId: r.deviceId || "anon-" + z.id, severity: r.severity, tick: tickOf(r.ts) }));
+      .map((r) => ({ deviceId: r.deviceId || "anon-" + z.id, severity: fusionSeverity(r), tick: tickOf(r.ts) }));
     const maxAge = PARAMS.MAX_AGE_HALF_LIVES * PARAMS.HALF_LIFE_TICKS;
     const p = zoneProbability({ reading, reports: zoneReports, now: nowTick, trust });
     out[z.id] = {
@@ -43,4 +54,4 @@ function fusedZones({ zones, reports, offline, now }) {
   return out;
 }
 
-module.exports = { trustFromReports, fusedZones, tickOf };
+module.exports = { trustFromReports, fusedZones, fusionSeverity, tickOf };

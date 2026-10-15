@@ -4,7 +4,7 @@ import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip, useMapEvents } f
 import { useFloodData } from "../FloodDataContext";
 import { STATUS, CATEGORIES, SEVERITY, REPORT_STATUS } from "../constants";
 import MapReady from "../MapReady";
-import ReportModal from "../ReportModal";
+import ReportModal, { DEPTHS } from "../ReportModal";
 import { DangerZones, RouteLayer, RouteSummary, useEvacuation } from "../EvacuationRoute";
 
 function MapClicks({ onClick }) {
@@ -92,6 +92,7 @@ export default function LiveMap() {
             <CircleMarker key={r.id} bubblingMouseEvents={false} center={[r.lat, r.lng]} radius={6} pathOptions={{ color: "#ffffff", fillColor: SEVERITY[r.severity].color, fillOpacity: 1, weight: 1.5 }}>
               <Popup>
                 <strong>{CATEGORIES[r.category]}</strong> · {SEVERITY[r.severity].label} severity<br />
+                {r.depth && <>Water: {r.depth}-deep (~{DEPTHS[r.depth].cm} cm)<br /></>}
                 {r.description}<br />
                 <span style={{ color: "#666" }}>{r.reporter} · {REPORT_STATUS[r.status].label}</span>
               </Popup>

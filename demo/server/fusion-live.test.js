@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const { PARAMS } = require("./fusion");
-const { trustFromReports, fusedZones, tickOf } = require("./fusion-live");
+const { trustFromReports, fusedZones, fusionSeverity, tickOf } = require("./fusion-live");
 
 const NOW = 200_000; // tick 100
 const rep = (id, deviceId, status, extra = {}) => ({ id, deviceId, zoneId: "z", severity: "high", ts: NOW, status, ...extra });
@@ -55,6 +55,25 @@ test("online zone with a high water level is flagged by the sensor", () => {
   const out = run(zone(80), []);
   assert.ok(out.z.p >= 0.5, `got ${out.z.p}`);
   assert.equal(out.z.sensorOnline, true);
+});
+
+test("water depth maps onto fusion severity, and the report's own higher severity wins", () => {
+  assert.equal(fusionSeverity({ severity: "low", depth: "ankle" }), "low");
+  assert.equal(fusionSeverity({ severity: "low", depth: "knee" }), "medium");
+  assert.equal(fusionSeverity({ severity: "low", depth: "waist" }), "high");
+  assert.equal(fusionSeverity({ severity: "low", depth: "chest" }), "high");
+  assert.equal(fusionSeverity({ severity: "medium", depth: "ankle" }), "medium", "own severity is higher");
+  assert.equal(fusionSeverity({ severity: "high", depth: "ankle" }), "high");
+  assert.equal(fusionSeverity({ severity: "medium", depth: null }), "medium", "no depth leaves severity alone");
+  assert.equal(fusionSeverity({ severity: "medium" }), "medium");
+});
+
+test("a deeper water report weighs more in fusion, and an ankle report fuses like a low report", () => {
+  const one = (extra) => run(zone(10), [rep("a", "n1", "open", extra)], new Set(["z"])).z.p;
+  const ankle = one({ severity: "low", depth: "ankle" });
+  const waist = one({ severity: "low", depth: "waist" });
+  assert.ok(waist > ankle, `waist ${waist} should exceed ankle ${ankle}`);
+  assert.equal(ankle, one({ severity: "low" }));
 });
 
 test("ticks are two-second buckets of the wall clock", () => {

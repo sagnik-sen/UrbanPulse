@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useFloodData } from "../FloodDataContext";
 import { useAuth } from "../AuthContext";
 import { CATEGORIES, SEVERITY, REPORT_STATUS, timeAgo, downloadCsv } from "../constants";
-import ReportModal from "../ReportModal";
+import ReportModal, { DEPTHS } from "../ReportModal";
 
 // "rejected" is staff-only, so it lives here rather than in the constants shared with the citizen app
 const STATUS_OPTIONS = { ...REPORT_STATUS, rejected: { label: "False report", color: "#898781" } };
@@ -91,6 +91,7 @@ export default function CitizenReports() {
                   <td className="desc-cell">
                     {r.status === "rejected" && <span className="badge" style={{ color: "#898781", marginRight: 6 }}>False report</span>}
                     {r.description}
+                    {r.depth && <div className="muted small">Water: {r.depth}-deep (~{DEPTHS[r.depth].cm} cm)</div>}
                   </td>
                   <td className="muted small">
                     {r.reporter}
