@@ -23,6 +23,7 @@ const { matchOptimal, matchGreedy, validateRequest, validateBoat, validateBoatPa
 const { EVENTS, loadEvent, createReplay, listEvents } = require("./timemachine");
 const { rateLimit } = require("./ratelimit");
 const { occupied, checkIn, checkOut, tokenMatches, newToken } = require("./checkin");
+const relief = require("./relief");
 
 // optional server/.env holds the signing key for blockchain anchoring; the app runs without it
 try { process.loadEnvFile(path.join(__dirname, ".env")); } catch {}
@@ -170,6 +171,13 @@ let t = 0;
 
 // zones whose water-level sensor an admin has taken offline; their level is ignored by fusion
 const offlineSensors = new Set(db.getSetting("offlineSensors", []));
+
+// flood relief ledger (relief.js). The pepper keys card numbers: a real deployment keeps it in a secrets
+// manager, never next to the data, since the pepper plus this table would let card numbers be brute-forced.
+// The state is one settings row rewritten on each change: fine for a demo, not for a city-wide scheme.
+const reliefPepper = process.env.RELIEF_PEPPER || db.getSetting("reliefPepper", null) || (() => { const p = relief.newPepper(); db.setSetting("reliefPepper", p); return p; })();
+const reliefState = db.getSetting("reliefState", relief.emptyState());
+const saveRelief = () => db.setSetting("reliefState", reliefState);
 
 function currentSnapshot() {
   const now = Date.now();
@@ -633,6 +641,66 @@ app.post("/api/rescue/:id/rescued", requireRole(...RESPONDERS), (req, res) => {
   res.json(r);
 });
 
+// ---- Flood relief ledger -------------------------------------------------------
+// Citizens get a collection slot for their ration card (public). Shop staff mark the cash paid. Every
+// token and payment is an audit entry without card numbers or keys, so the public totals can be checked
+// against the sealed log. Card numbers are never stored: relief.js keys each card by HMAC.
+const reliefTokenLimit = rateLimit({ windowMs: 10 * 60_000, max: 10, name: "relief-token" });
+const reliefLookupLimit = rateLimit({ windowMs: 10 * 60_000, max: 20, name: "relief-lookup" });
+const reliefZoneName = (id) => LOCATIONS.find((l) => l.id === id)?.name ?? id;
+const reliefTokenResponse = (token) => ({ code: token.code, shop: { name: token.shopName, zone: reliefZoneName(token.zoneId) }, day: token.day, hour: token.hour, amountRs: relief.AMOUNT_RS });
+
+app.post("/api/relief/token", reliefTokenLimit, (req, res) => {
+  const key = relief.cardKey(reliefPepper, req.body?.cardNumber);
+  if (!key) return res.status(400).json({ error: "Enter the 10 to 16 character ration card number" });
+  const zoneId = req.body?.zoneId;
+  if (!LOCATIONS.some((l) => l.id === zoneId)) return res.status(400).json({ error: "Choose an area" });
+  const result = relief.issueToken(reliefState, { cardKey: key, zoneId, now: Date.now() });
+  if (result.error) return res.status(409).json({ error: result.error });
+  // only a new token is sealed; asking again returns the same token and adds no entry
+  if (result.issued) {
+    saveRelief();
+    audit(null, "relief_token_issued", { shopId: result.token.shopId, zone: reliefZoneName(result.token.zoneId), day: result.token.day, hour: result.token.hour });
+  }
+  res.json(reliefTokenResponse(result.token));
+});
+
+app.post("/api/relief/token/lookup", reliefLookupLimit, (req, res) => {
+  const key = relief.cardKey(reliefPepper, req.body?.cardNumber);
+  if (!key) return res.status(400).json({ error: "Enter the 10 to 16 character ration card number" });
+  const token = relief.lookupToken(reliefState, key);
+  if (!token) return res.status(404).json({ error: "No flood relief token for this card number" });
+  res.json(reliefTokenResponse(token));
+});
+
+// public totals; they equal the relief_paid entries in the sealed audit log
+app.get("/api/relief/ledger", (req, res) => {
+  const s = relief.summary(reliefState);
+  res.json({
+    amountRs: s.amountRs,
+    totals: s.totals,
+    shops: s.shops.map((x) => ({ id: x.id, name: x.name, zone: reliefZoneName(x.zoneId), issued: x.issued, paid: x.paid, amountRs: x.amountRs })),
+  });
+});
+
+app.post("/api/relief/pay", requireRole(...RESPONDERS), (req, res) => {
+  const key = relief.cardKey(reliefPepper, req.body?.cardNumber);
+  if (!key) return res.status(400).json({ error: "Enter the 10 to 16 character ration card number" });
+  const shop = relief.SHOPS.find((s) => s.id === req.body?.shopId);
+  if (!shop) return res.status(400).json({ error: "Choose a shop" });
+  const result = relief.pay(reliefState, { tokenCode: req.body?.code, cardKey: key, shopId: shop.id, now: Date.now() });
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  saveRelief();
+  audit(req.user, "relief_paid", { shopId: shop.id, shop: shop.name, zone: reliefZoneName(shop.zoneId), amountRs: result.amountRs });
+  res.json({ code: result.token.code, shop: { name: shop.name, zone: reliefZoneName(shop.zoneId) }, amountRs: result.amountRs });
+});
+
+// staff view: totals and slot loads per shop
+app.get("/api/relief", requireRole(...RESPONDERS), (req, res) => {
+  const s = relief.summary(reliefState);
+  res.json({ ...s, shops: s.shops.map((x) => ({ ...x, zone: reliefZoneName(x.zoneId) })) });
+});
+
 app.post("/api/broadcasts", requireRole("admin"), (req, res) => {
   const { zoneId, severity, message, channels } = req.body;
   if (!message || !String(message).trim()) return res.status(400).json({ error: "message required" });
@@ -1051,7 +1119,7 @@ function releaseReservoirForReplay(ev) {
   releaseReservoir(reservoir, { cusecs: ev.cusecs, durationHours: null, reason: "Documented release, replayed from the official timeline" }, null, { replay: true });
 }
 
-const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared", "sensor_status", "reservoir_release", "rescue_requested", "rescue_assigned", "rescue_completed", "rescue_cancelled", "boat_registered", "boat_updated", "vulnerable_registered", "vulnerable_cancelled", "shelter_mode", "shelter_token_rotated", "shelter_checkin", "shelter_checkout", "timemachine_started", "timemachine_stopped"]);
+const AUDIT_ACTIONS = new Set(["login", "login_failed", "login_locked", "logout", "thresholds_changed", "storm_simulated", "report_status", "team_dispatched", "incident_note", "broadcast_sent", "evacuation_order", "demo_data_cleared", "rain_link", "alert_published", "incident_opened", "incident_cleared", "sensor_status", "reservoir_release", "rescue_requested", "rescue_assigned", "rescue_completed", "rescue_cancelled", "boat_registered", "boat_updated", "vulnerable_registered", "vulnerable_cancelled", "shelter_mode", "shelter_token_rotated", "shelter_checkin", "shelter_checkout", "timemachine_started", "timemachine_stopped", "relief_token_issued", "relief_paid"]);
 
 app.get("/api/audit", requireRole("admin"), (req, res) => {
   const action = AUDIT_ACTIONS.has(req.query.action) ? req.query.action : undefined;

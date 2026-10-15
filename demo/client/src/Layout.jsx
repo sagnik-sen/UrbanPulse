@@ -31,6 +31,7 @@ export default function Layout() {
     { to: "/reports", label: "Citizen Reports", badge: openReports, badgeKind: "warning" },
     { to: "/broadcasts", label: "Broadcasts" },
     { to: "/shelters", label: "Relief Shelters" },
+    can.respond && { to: "/relief", label: "Relief" },
     { to: "/reservoirs", label: "Reservoir Desk" },
     { to: "/analytics", label: "Analytics" },
     { to: "/accountability", label: "Accountability" },

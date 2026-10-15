@@ -23,6 +23,8 @@ import Rescue from "./pages/Rescue";
 import Audit from "./pages/Audit";
 import Reservoirs from "./pages/Reservoirs";
 import TimeMachine from "./pages/TimeMachine";
+import Relief from "./pages/Relief";
+import ReliefLedger from "./pages/ReliefLedger";
 import "./App.css";
 
 export default function App() {
@@ -34,6 +36,7 @@ export default function App() {
             <Route path="login" element={<Login />} />
             <Route path="citizen" element={<Citizen />} />
             <Route path="checkin/:shelterId" element={<CheckIn />} />
+            <Route path="relief-ledger" element={<ReliefLedger />} />
             <Route element={<RequireAuth><Layout /></RequireAuth>}>
               <Route index element={<Overview />} />
               <Route path="map" element={<LiveMap />} />
@@ -47,6 +50,7 @@ export default function App() {
               <Route path="broadcasts" element={<Broadcasts />} />
               <Route path="shelters" element={<Shelters />} />
               <Route path="reservoirs" element={<Reservoirs />} />
+              <Route path="relief" element={<RequireAuth roles={["admin", "officer"]}><Relief /></RequireAuth>} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="accountability" element={<Accountability />} />
               <Route path="architecture" element={<Architecture />} />

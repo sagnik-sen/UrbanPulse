@@ -35,6 +35,8 @@ const ACTIONS = {
   shelter_token_rotated: { label: "Shelter check-in code replaced", tone: "warn" },
   timemachine_started: { label: "Replay started", tone: "warn" },
   timemachine_stopped: { label: "Replay stopped", tone: "neutral" },
+  relief_token_issued: { label: "Relief token issued", tone: "neutral" },
+  relief_paid: { label: "Relief paid at shop", tone: "ok" },
 };
 
 // who acts when no staff member is signed in

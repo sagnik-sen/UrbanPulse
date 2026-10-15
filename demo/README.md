@@ -166,6 +166,18 @@ In 2015, some Chennai relief camps overflowed while others nearby sat empty, bec
 - **Limits:** the token is printed in the URL, so it can appear in server access logs. A person who has the poster can check in any group until the shelter is full. Check-ins are accepted in either mode; the capacity check uses the check-in count, while the displayed beds follow the selected occupancy mode.
 - **Endpoints:** `PUT /api/shelters/mode`, `GET /api/shelters/tokens`, `POST /api/shelters/:id/token`, and the public `POST /api/shelters/:id/checkin` and `POST /api/shelters/:id/checkout`. Logic and tests are in `server/checkin.js` and `server/checkin.test.js`.
 
+### Flood relief ledger
+
+After Cyclone Michaung (December 2023), Tamil Nadu paid Rs 6,000 per ration card to about 24.25 lakh families (Rs 1,486 crore) in Chennai and affected taluks of three neighbouring districts. Families got tokens naming a date and time to collect the cash at their ration (PDS) shop. There were queues and "chaos in PDS shops", and people without tokens had to apply at the shops. Sources: [DT Next, Cyclonic Michaung: CM launches Rs 6,000 one-time assistance scheme](https://www.dtnext.in/news/chennai/cyclonic-michaung-cm-stalin-launches-rs-6000-one-time-assistance-scheme-754998) and [Outlook India, Rs 6,000 flood relief to ration cardholders in 4 flood-affected districts](https://www.outlookindia.com/national/tamil-nadu-govt-to-provide-rs-6-000-flood-relief-to-ration-cardholders-in-4-flood-affected-districts-news-336002).
+
+This demo does the same with scheduled slots, one payment per card, and a public ledger:
+
+- **Flow:** a citizen enters a ration card number and an area (`POST /api/relief/token`) and gets a token: a shop, a day and a one-hour slot (`RF-` plus six characters). `schedule()` in `server/relief.js` fills each shop's hours up to its rate (40 to 80 households an hour), earliest first, and balances the zone's two shops. Asking again returns the same token. Shop staff record the payment (`POST /api/relief/pay`) after checking the token, the card and the shop; each token is paid once.
+- **Privacy:** the server never stores a card number. Each card is keyed by `HMAC-SHA256(pepper, card)` after stripping spaces and dashes and uppercasing. Audit entries hold only shop, zone, amount, slot and counts. The pepper comes from `RELIEF_PEPPER`, or is generated once and kept in the settings table. A real deployment keeps the pepper in a secrets manager, never next to the data: the pepper and the table together would let card numbers be brute-forced. Changing the pepper after tokens exist orphans every stored key.
+- **Ledger:** `GET /api/relief/ledger` is public and shows per-shop and total counts and amounts. Every token and payment is a sealed Audit Log entry (`relief_token_issued`, `relief_paid`), and the payment total equals the sealed payment entries times Rs 6,000. The staff view `GET /api/relief` adds slot loads.
+- **Known limits:** the shops and rates are illustrative, not surveyed. The lookup route (`POST /api/relief/token/lookup`) tells anyone whether a card holds a token; it is rate-limited per IP but is still an oracle. Anyone with a card number can get a token, because the demo cannot check ration cards. Payments are not checked against the slot time. The scheme's first day is the IST date of the first token, and it runs seven days. The state is one settings row, which suits a demo. Clearing demo data leaves relief records alone.
+- **Evaluation:** `node experiments/relief.js` compares walk-in queues with scheduled slots over 200 seeds. See `experiments/results/relief.md`.
+
 ## Blockchain audit anchoring
 
 Audit entries are hashed into a Merkle tree in batches, and only the root goes on-chain to the
