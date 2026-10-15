@@ -11,6 +11,7 @@ import VulnerableRegister from "../VulnerableRegister";
 import Toasts from "../Toasts";
 import OfflineBanner, { offlineCheckText } from "../OfflineBanner";
 import SmsDemo from "../SmsDemo";
+import AlertReason from "../AlertReason";
 import { loadSnapshot } from "../offline";
 import { DangerZones, RouteLayer, RouteSummary, useEvacuation } from "../EvacuationRoute";
 
@@ -123,6 +124,7 @@ function AlertCheck({ request, lang }) {
                 <div className="c-alert-meta"><span>{result.alert.code}</span><span>·</span><span>{result.alert.zone}</span><span>·</span><span>{new Date(result.alert.issuedAt).toLocaleString()}</span></div>
                 <div className="c-alert-text">{result.alert.message}</div>
               </div>
+              <AlertReason reason={result.alert.reason} lang={lang} sealed={result.status === "verified"} />
               <div className="small" style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                 {result.explorer && result.txHash && <a href={`${result.explorer}/tx/${result.txHash}`} target="_blank" rel="noreferrer">{t(lang, "check.viewRecord")}</a>}
                 {result.proof && <button type="button" className="link-btn" onClick={downloadProof}>{t(lang, "check.download")}</button>}
@@ -311,6 +313,7 @@ export default function Citizen() {
               <span>{b.zoneName}</span><span>·</span><span>{timeAgoText(lang, b.ts)}</span>
             </div>
             <div className="c-alert-text">{b.message}</div>
+            <AlertReason reason={b.reason} lang={lang} />
             {b.code && (
               <div className="c-alert-meta" style={{ marginTop: 6, marginBottom: 0 }}>
                 <button type="button" className="link-btn" onClick={() => setCheckRequest({ code: b.code })}>{t(lang, "alerts.check")}</button>

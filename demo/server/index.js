@@ -192,7 +192,7 @@ function currentSnapshot() {
 }
 
 const MESSAGE_MAX = 300;
-function addBroadcast({ zoneId, severity, message, channels, source }) {
+function addBroadcast({ zoneId, severity, message, channels, source, reason }) {
   const zone = LOCATIONS.find((l) => l.id === zoneId);
   const recipients = zone ? zone.population : LOCATIONS.reduce((s, l) => s + l.population, 0);
   const id = randomUUID();
@@ -200,13 +200,13 @@ function addBroadcast({ zoneId, severity, message, channels, source }) {
   // the code travels inside the text itself, so a forwarded copy still carries it
   const suffix = ` Verify: ${code}`;
   message = message.slice(0, MESSAGE_MAX - suffix.length) + suffix;
-  const b = { id, code, zoneId, zoneName: zone ? zone.name : "All zones", severity, message, channels, source, recipients, ts: Date.now() };
+  const b = { id, code, zoneId, zoneName: zone ? zone.name : "All zones", severity, message, channels, source, reason, recipients, ts: Date.now() };
   broadcasts.unshift(b);
   broadcasts = broadcasts.slice(0, BROADCASTS_CAP);
   saveBroadcast(b);
   io.emit("broadcast", b);
   // public record with no staff identity, so its blockchain proof can be handed to anyone
-  audit(null, "alert_published", { code, zoneId, zone: b.zoneName, severity, message, channels, source });
+  audit(null, "alert_published", { code, zoneId, zone: b.zoneName, severity, message, channels, source, reason });
   return b;
 }
 
@@ -227,7 +227,11 @@ function updateIncidents(payload) {
         saveIncident(inc);
         toStaff("incident-opened", inc);
         audit(null, "incident_opened", { incidentId: inc.id, zoneId: p.id, zone: p.name, level: p.level });
-        addBroadcast({ zoneId: p.id, severity: "danger", message: `FLOOD WARNING: Water levels critical in ${p.name}. Move to higher ground or the nearest relief shelter.`, channels: ["sms", "push"], source: "auto" });
+        const reason = { rule: "level", zone: p.name, level: p.level, danger: thresholds.danger };
+        if (p.forecastHours != null) reason.forecastHours = p.forecastHours;
+        const rain24hMm = rainfall.get().zones[p.id]?.past24hMm;
+        if (rain24hMm != null) reason.rain24hMm = rain24hMm;
+        addBroadcast({ zoneId: p.id, severity: "danger", message: `FLOOD WARNING: Water levels critical in ${p.name}. Move to higher ground or the nearest relief shelter.`, channels: ["sms", "push"], source: "auto", reason });
       } else if (open) {
         open.currentLevel = p.level;
         if (p.level > open.peakLevel) open.peakLevel = p.level;
@@ -289,7 +293,7 @@ async function refreshRainfall() {
   if (!state.stale) {
     const imd = imdAlerts(db.getSetting("imdAlertState", {}), LOCATIONS, state, Date.now());
     db.setSetting("imdAlertState", imd.state);
-    for (const a of imd.alerts) addBroadcast({ zoneId: a.zoneId, severity: a.severity, message: a.message, channels: ["sms", "push"], source: "auto" });
+    for (const a of imd.alerts) addBroadcast({ zoneId: a.zoneId, severity: a.severity, message: a.message, channels: ["sms", "push"], source: "auto", reason: a.reason });
   }
   io.emit("rainfall-update", rainfallView());
 }
@@ -556,7 +560,7 @@ app.post("/api/broadcasts", requireRole("admin"), (req, res) => {
   if (!message || !String(message).trim()) return res.status(400).json({ error: "message required" });
   const valid = ["sms", "push", "siren"].filter((c) => Array.isArray(channels) && channels.includes(c));
   if (valid.length === 0) return res.status(400).json({ error: "pick at least one channel" });
-  const b = addBroadcast({ zoneId: zoneId || "all", severity: severity || "info", message: String(message).slice(0, 300), channels: valid, source: "manual" });
+  const b = addBroadcast({ zoneId: zoneId || "all", severity: severity || "info", message: String(message).slice(0, 300), channels: valid, source: "manual", reason: { rule: "manual", role: req.user.role } });
   audit(req.user, "broadcast_sent", { zone: b.zoneName, severity: b.severity, channels: b.channels, recipients: b.recipients, message: b.message });
   res.json(b);
 });
@@ -898,6 +902,7 @@ app.post("/api/evacuation-plan/execute", requireRole(...RESPONDERS), (req, res) 
       message: `EVACUATION ORDER for ${zoneName}: proceed now to ${targets}. Follow the route in the UrbanPulse app and avoid flooded roads.`.slice(0, 300),
       channels: ["sms", "push", "siren"],
       source: "manual",
+      reason: { rule: "evacuation-order", shelters: Object.keys(byShelter), people: rows.reduce((n, r) => n + r.people, 0) },
     });
     const inc = incidents.find((i) => i.zoneId === zoneId && i.status !== "cleared");
     if (inc) {
@@ -952,6 +957,7 @@ app.post("/api/reservoirs/release", requireRole(...RESPONDERS), (req, res) => {
       message: `RESERVOIR RELEASE: ${cusecs} cusecs from ${reservoir.name} for ${durationHours} h. ${reservoir.river} river will rise. Stay away from riverbanks and low bridges.`,
       channels: ["sms", "push"],
       source: "manual",
+      reason: { rule: "reservoir-release", reservoir: reservoir.name, river: reservoir.river, cusecs, durationHours },
     });
   }
   res.json({ ok: true, alerts: reservoir.downstream.length });
@@ -988,7 +994,7 @@ app.get("/api/alerts/verify/:code", alertVerifyLimit, async (req, res) => {
   const d = JSON.parse(row.details);
   const out = {
     found: true,
-    alert: { code, zone: d.zone, severity: d.severity, message: d.message, source: d.source, issuedAt: row.ts },
+    alert: { code, zone: d.zone, severity: d.severity, message: d.message, source: d.source, reason: d.reason ?? null, issuedAt: row.ts },
     explorer: deployment?.explorer ?? null,
     txHash: row.tx_hash ?? null,
   };

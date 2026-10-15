@@ -51,6 +51,7 @@ test("observed alert fires on the first rise, not while the rank persists, and r
   assert.equal(out.alerts[0].severity, "warning");
   assert.equal(out.alerts[0].zoneId, "velachery");
   assert.match(out.alerts[0].message, /^IMD HEAVY RAIN: 70 mm in the last 24 h in Velachery\./);
+  assert.deepEqual(out.alerts[0].reason, { rule: "imd-observed", mm: 70, threshold: 64.5, category: "heavy" });
   s = out.state;
 
   out = run(s, 80);
@@ -61,6 +62,7 @@ test("observed alert fires on the first rise, not while the rank persists, and r
   assert.equal(out.alerts.length, 1);
   assert.equal(out.alerts[0].severity, "danger");
   assert.match(out.alerts[0].message, /^IMD VERY HEAVY RAIN: 130 mm/);
+  assert.deepEqual(out.alerts[0].reason, { rule: "imd-observed", mm: 130, threshold: 115.6, category: "veryHeavy" });
   s = out.state;
 
   out = run(s, 130);
@@ -82,6 +84,7 @@ test("extremely heavy observed rain is a danger alert", () => {
   assert.equal(out.alerts.length, 1);
   assert.equal(out.alerts[0].severity, "danger");
   assert.match(out.alerts[0].message, /^IMD EXTREMELY HEAVY RAIN: 210 mm/);
+  assert.deepEqual(out.alerts[0].reason, { rule: "imd-observed", mm: 210, threshold: 204.5, category: "extremelyHeavy" });
 });
 
 test("forecast alert only at very heavy or more, once per rise, warning severity", () => {
@@ -94,6 +97,7 @@ test("forecast alert only at very heavy or more, once per rise, warning severity
   assert.equal(out.alerts.length, 1);
   assert.equal(out.alerts[0].severity, "warning");
   assert.equal(out.alerts[0].message, "IMD FORECAST: very heavy rain (128 mm) expected in Velachery in the next 24 h. Prepare to move to higher ground.");
+  assert.deepEqual(out.alerts[0].reason, { rule: "imd-forecast", mm: 128, threshold: 115.6, category: "veryHeavy" });
   s = out.state;
 
   out = run(s, 0, 130);

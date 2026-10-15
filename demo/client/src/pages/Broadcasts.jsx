@@ -4,6 +4,7 @@ import { useFloodData } from "../FloodDataContext";
 import { useAuth } from "../AuthContext";
 import { timeAgo, formatCount } from "../constants";
 import { VERIFIER_URL, encode } from "../verifier";
+import { explainReason } from "../AlertReason";
 
 const TEMPLATES = [
   { label: "Evacuation order", severity: "danger", text: "EVACUATE NOW: Rising flood waters in your area. Proceed to the nearest relief shelter. Do not attempt to cross flooded roads." },
@@ -145,6 +146,7 @@ export default function Broadcasts() {
                   <span>{b.channels.map((c) => CHANNEL_LABEL[c]).join(", ")}</span>
                 </div>
                 <div className="feed-text">{b.message}</div>
+                {b.reason && <div className="muted small" style={{ marginTop: 4 }}>{explainReason(b.reason, "en").join(" ")}</div>}
                 <div className="feed-time">{timeAgo(b.ts)} · ~{formatCount(b.recipients)} recipients{b.code && <> · code <span className="mono">{b.code}</span></>}</div>
                 {b.code && (
                   <button type="button" className="btn ghost" style={{ marginTop: 8, padding: "3px 10px", fontSize: 12 }} disabled={posterBusy === b.code} onClick={() => makePoster(b.code)}>

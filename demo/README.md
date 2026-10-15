@@ -105,6 +105,16 @@ A second alert channel, alongside the level-based alerts, works from 24-hour rai
 
 The choice of this rule is backed by `experiments/results/replay.md` (Model B). In the November 2023 control month, assumed flood-free, the 24-hour rule raised no alerts, while the level rule raised 1 to 35 warnings per zone. The trade-off is timing: for the Michaung flood the 24-hour rule's danger alerts came on the flood day itself (4 December), later than the level rule's for Velachery. It is added as a second channel, not a replacement.
 
+## Why this alert?
+
+Every official alert stores a machine-readable `reason` next to its text: which rule fired and the evidence it used. The reason is written into the alert's public audit record, so it is sealed on the blockchain with the alert. Citizens see it under "Why this alert?" on each alert, and the alert check shows it for a verified alert. Alerts sent before this change have no reason and show none.
+
+- `level`: an incident opened because a zone's water level reached the danger line (level, danger line, rain in the last 24 h, forecast when available)
+- `imd-observed` / `imd-forecast`: the IMD 24 h rain total and the category cut-off it crossed (`server/imd.js`)
+- `manual`: a broadcast from the Broadcasts page (the sender's role only, no username)
+- `evacuation-order`: an evacuation order (shelters and the number of people assigned from the zone)
+- `reservoir-release`: a reservoir release (reservoir, river, cusecs, duration)
+
 ## Evacuation experiment
 
 ```bash

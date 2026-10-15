@@ -2,11 +2,13 @@
 // Values come from Open-Meteo rounded to 0.1 mm, so the 115.5 / 115.6 and 204.4 / 204.5 cut-offs cover every value.
 const RANKS = ["none", "heavy", "veryHeavy", "extremelyHeavy"];
 const LABELS = { heavy: "Heavy rain", veryHeavy: "Very heavy rain", extremelyHeavy: "Extremely heavy rain" };
+// lower bound of each category in mm; an alert's reason quotes it as the rule that fired
+const CUTOFFS = { heavy: 64.5, veryHeavy: 115.6, extremelyHeavy: 204.5 };
 
 function category(mm) {
-  if (mm >= 204.5) return "extremelyHeavy";
-  if (mm >= 115.6) return "veryHeavy";
-  if (mm >= 64.5) return "heavy";
+  if (mm >= CUTOFFS.extremelyHeavy) return "extremelyHeavy";
+  if (mm >= CUTOFFS.veryHeavy) return "veryHeavy";
+  if (mm >= CUTOFFS.heavy) return "heavy";
   return "none";
 }
 
@@ -41,11 +43,13 @@ function imdAlerts(prevState, zones, rainfall, now) {
       const advice = obs.last >= 2
         ? "Flooding likely in low-lying areas. Move vehicles and valuables to higher ground."
         : "Waterlogging possible in low-lying areas. Avoid underpasses and flooded roads.";
-      alerts.push({ zoneId: z.id, severity: obs.last >= 2 ? "danger" : "warning", message: `IMD ${LABELS[cat].toUpperCase()}: ${Math.round(r.past24hMm)} mm in the last 24 h in ${z.name}. ${advice}`, ts: now });
+      const reason = { rule: "imd-observed", mm: r.past24hMm, threshold: CUTOFFS[cat], category: cat };
+      alerts.push({ zoneId: z.id, severity: obs.last >= 2 ? "danger" : "warning", message: `IMD ${LABELS[cat].toUpperCase()}: ${Math.round(r.past24hMm)} mm in the last 24 h in ${z.name}. ${advice}`, reason, ts: now });
     }
     if (fc.alert) {
       const cat = RANKS[fc.last];
-      alerts.push({ zoneId: z.id, severity: "warning", message: `IMD FORECAST: ${LABELS[cat].toLowerCase()} (${Math.round(r.next24hMm)} mm) expected in ${z.name} in the next 24 h. Prepare to move to higher ground.`, ts: now });
+      const reason = { rule: "imd-forecast", mm: r.next24hMm, threshold: CUTOFFS[cat], category: cat };
+      alerts.push({ zoneId: z.id, severity: "warning", message: `IMD FORECAST: ${LABELS[cat].toLowerCase()} (${Math.round(r.next24hMm)} mm) expected in ${z.name} in the next 24 h. Prepare to move to higher ground.`, reason, ts: now });
     }
   }
   return { state, alerts };
