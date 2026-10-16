@@ -1,17 +1,17 @@
 const LAYERS = [
   { n: 1, title: "Physical Environment", desc: "Roads, Stormwater Drains, Lakes" },
-  { n: 2, title: "Data Collection", desc: "Live Open-Meteo rainfall and citizen reports now; water-level sensors simulated until IoT hardware is installed" },
-  { n: 3, title: "Communication", desc: "MQTT, 5G, Wi-Fi, LoRaWAN" },
+  { n: 2, title: "Data Collection", desc: "Live Open-Meteo rainfall, citizen flood and water-depth reports, shelter check-ins; water-level sensors simulated until IoT hardware is installed" },
+  { n: 3, title: "Communication", desc: "Offline-capable citizen app and an SMS command service (simulated gateway) now; MQTT, 5G, LoRaWAN planned" },
   { n: 4, title: "Processing", desc: "Apache Kafka, PostgreSQL" },
   { n: 5, title: "Cloud Infrastructure", desc: "AWS / Azure scalable storage" },
-  { n: 6, title: "Forecasting & Planning", desc: "Damped-trend smoothing forecast and capacity-aware evacuation planning now; LSTM / XGBoost once sensor data exists" },
-  { n: 7, title: "Application Layer", desc: "GCC Dashboard, Mobile App" },
-  { n: 8, title: "Decision & Action", desc: "Alerts, Evacuation Orders, Dispatch" },
-  { n: 9, title: "Trust & Accountability", desc: "Audit log sealed on the Shardeum blockchain; citizens can verify any official alert" },
+  { n: 6, title: "Forecasting & Planning", desc: "Damped-trend forecast, IMD 24-hour rainfall rules, sensor + citizen-report fusion, capacity-aware evacuation with vulnerable residents first, optimal boat matching; LSTM / XGBoost once sensor data exists" },
+  { n: 7, title: "Application Layer", desc: "GCC command center and a Tamil / English citizen app; a time machine replays the 2015 and 2023 floods" },
+  { n: 8, title: "Decision & Action", desc: "Alerts with explanations, evacuation orders, dispatch, volunteer boat rescue, reservoir releases, relief distribution" },
+  { n: 9, title: "Trust & Accountability", desc: "Audit log sealed on the Shardeum blockchain by two agencies; citizens can verify any official alert; public relief ledger" },
 ];
 
 const BUILT = new Set([6, 7, 8, 9]);
-const PARTLY = new Set([2]);
+const PARTLY = new Set([2, 3]);
 
 export default function Architecture() {
   return (
