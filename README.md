@@ -6,6 +6,7 @@ Chennai floods almost every Northeast Monsoon (2015 floods, Cyclone Michaung in 
 
 ## What's here
 
+- `docs/DOCUMENTATION.md`: full technical documentation
 - `UrbanPulse Chennai.pptx`: project presentation (problem, root cause, proposed architecture)
 - `demo/`: working prototype of the application side of the system
   - **Command center** for GCC staff: live risk map and forecasts, IMD 24-hour rainfall alerts, incidents and dispatch, citizen reports fused with sensor readings, broadcasts, shelters with QR check-in, capacity-aware evacuation planning that puts vulnerable residents first, volunteer boat rescue, a reservoir release desk, a flood relief ledger, response-time accountability, and a time machine that replays Cyclone Michaung (2023) and the 2015 floods through the live system
@@ -19,6 +20,7 @@ Water-level sensors are simulated for now; rainfall is live (Open-Meteo) and rea
 ## Run it
 
 Needs Node.js 22.5+. Full setup, demo accounts and a demo walkthrough are in [demo/README.md](demo/README.md).
+The complete technical reference (architecture, configuration, API, algorithms, blockchain layer, experiments, security, limitations) is [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md).
 
 ```bash
 cd demo/server && npm install && npm start

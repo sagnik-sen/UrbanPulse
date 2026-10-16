@@ -13,6 +13,8 @@ simulated drains, about +5 level points per mm/h, so heavy rain floods zones on 
 
 Requires Node.js 22.5 or newer (uses the built-in `node:sqlite` module).
 
+Full technical documentation (API reference, algorithms, configuration, experiments, security, limits): [../docs/DOCUMENTATION.md](../docs/DOCUMENTATION.md).
+
 ## Run
 
 ```bash
@@ -312,6 +314,9 @@ Public routes (no sign-in) write data or cost a blockchain read, so each one has
 | `POST /api/sms/inbound` | 30 per min |
 | `GET /api/alerts/verify/:code` | 60 per min |
 | `GET /api/evacuation-route` | 30 per min |
+| `POST /api/shelters/:id/checkin`, `POST /api/shelters/:id/checkout` | 30 per 10 min, shared |
+| `POST /api/relief/token` | 10 per 10 min |
+| `POST /api/relief/token/lookup` | 20 per 10 min |
 
 Caps that stop slower spam, checked in the handlers:
 
