@@ -153,7 +153,7 @@ export default function Broadcasts() {
                     {posterBusy === b.code ? "Making QR…" : "Poster QR"}
                   </button>
                 )}
-                {posterNote?.code === b.code && <div className="form-error" style={{ marginTop: 8, marginBottom: 0 }}>{posterNote.text}</div>}
+                {posterNote && posterNote.code === b.code &&<div className="form-error" style={{ marginTop: 8, marginBottom: 0 }}>{posterNote.text}</div>}
               </div>
             </div>
           ))}
