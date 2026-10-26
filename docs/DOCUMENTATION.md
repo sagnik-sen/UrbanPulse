@@ -801,6 +801,7 @@ Client lint: `cd demo/client && npm run lint`.
 | Heavy-rain risk not shown | `server/models/heavy-rain-xgb.json` missing, or fewer than 72 past hours from Open-Meteo |
 | Audit entries stay "pending" | No `SHARDEUM_PRIVATE_KEY`, or wallet out of test SHM; check the server log for "anchoring failed" |
 | Reservoir releases anchored by GCC, not WRD | `SHARDEUM_WRD_PRIVATE_KEY` unset, wallet not registered (`add-agency.js`) or unfunded |
+| Rainfall shows "fetch failed (CODE)" or stale | The server could not reach `api.open-meteo.com`. `ENOTFOUND`: no DNS or no internet; `ECONNREFUSED`/`ECONNRESET`: a network or campus firewall is blocking it, so switch to a phone hotspot; `UND_ERR_CONNECT_TIMEOUT`: slow network. The server retries a minute after a failure |
 | Routes are straight lines | OSRM unreachable; check internet |
 | Map blank | No internet for tiles (expected offline) |
 | Offline mode does nothing | Service worker runs only in a production build: use `npm run demo:offline` |
