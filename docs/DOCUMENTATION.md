@@ -69,7 +69,8 @@ UrbanPulse is a working prototype of the application side of a city flood system
 | Water-level sensors | Simulated (stand-in for IoT hardware) |
 | SMS gateway | Simulated (no message leaves the server) |
 | Shelters, accessibility, boats, ration shops | Illustrative, not surveyed |
-| Forecast model | Damped-trend exponential smoothing (stand-in for a trained model) |
+| Water-level forecast | Damped-trend exponential smoothing (stand-in for a trained model) |
+| Heavy-rain risk model | Real: XGBoost trained on 25 years of ERA5 weather; live inputs from Open-Meteo |
 
 The system is a prototype for six Chennai zones: Pallikaranai Marshland, Velachery, OMR
 (Sholinganallur), T Nagar, Adyar and Mylapore. The scale benchmark runs the same code on all 200 GCC
@@ -88,12 +89,12 @@ wards.
 | 3 | Communication | Partly: offline-capable citizen app and simulated SMS service; MQTT, 5G, LoRaWAN planned |
 | 4 | Processing | Planned: Apache Kafka, PostgreSQL |
 | 5 | Cloud infrastructure | Planned: AWS / Azure |
-| 6 | Forecasting and planning | Built: damped-trend forecast, IMD 24 h rules, sensor + report fusion, capacity-aware evacuation, vulnerable-first planning, optimal boat matching |
-| 7 | Application | Built: GCC command center, Tamil / English citizen app, flood time machine |
+| 6 | Forecasting and planning | Built: XGBoost heavy-rain risk on real ERA5 data, damped-trend level forecast, IMD 24 h rules, sensor + report fusion, capacity-aware evacuation, vulnerable-first planning, optimal boat matching |
+| 7 | Application | Built: GCC command center, Tamil / English citizen app, flood time machine, public trust ledger |
 | 8 | Decision and action | Built: alerts with explanations, evacuation orders, dispatch, boat rescue, reservoir releases, relief distribution |
-| 9 | Trust and accountability | Built: two-agency blockchain-sealed audit log, citizen alert verification, public relief ledger |
+| 9 | Trust and accountability | Built: two-agency blockchain-sealed audit log, public trust ledger anyone can verify, citizen alert verification, public relief ledger |
 
-The app's Architecture page shows the same table with what is built and what is planned.
+The app's Architecture page shows a data-flow diagram (sources, models, decisions, people, trust) and, for each layer, what runs in the demo and what comes next.
 
 ### Runtime components
 
@@ -120,7 +121,7 @@ The app's Architecture page shows the same table with what is built and what is 
 - One server tick every 2 seconds is 2 simulated minutes. Each tick steps the zone model, runs the
   forecast for each zone, updates fusion, opens or clears incidents, and pushes the new state over
   Socket.IO.
-- Rainfall refreshes every 10 minutes. The IMD 24 h rule runs on each refresh.
+- Rainfall and weather refresh every 10 minutes. The IMD 24 h rule and the XGBoost heavy-rain model run on each refresh.
 - The audit anchor runs every 5 minutes when there are new entries.
 
 ---
@@ -144,6 +145,8 @@ demo/
     chain/                   AuditAnchor contract and chain scripts
     experiments/             experiment scripts, input data, results
     data/urbanpulse.db       SQLite database (created on first start, git-ignored)
+    models/                  trained heavy-rain model (XGBoost JSON) and its parity fixture
+  ml/                        fetch_era5.py and train.py for the heavy-rain model (Python)
   verifier/                  static verify.html + payload.js for poster QR codes
   figures/                   make_figures.py and generated paper figures
 ```
@@ -161,7 +164,8 @@ demo/
 | `planner.js` | Group planner shared by the app and experiments; `planWithPriority` |
 | `fusion.js`, `fusion-live.js` | Sensor + citizen-report fusion model and its live wiring |
 | `imd.js` | IMD 24 h rainfall categories and alert rules |
-| `rainfall.js` | Open-Meteo client |
+| `rainfall.js` | Open-Meteo client (rain, pressure, humidity, cloud, wind; 3 past days) |
+| `heavyrain.js` | Heavy-rain features and XGBoost tree walk (no ML runtime in Node) |
 | `reservoirs.js` | Chembarambakkam and Porur release desk |
 | `rescue.js` | Boat rescue requests, fleet, matching |
 | `vulnerable.js` | Privacy-preserving vulnerable resident register |
@@ -171,7 +175,7 @@ demo/
 | `timemachine.js` | Replays 2015 and 2023 rainfall through the live system |
 | `accountability.js` | Response-time metrics from the audit log |
 | `auth.js` | scrypt passwords, sessions, lockout |
-| `ratelimit.js` | Fixed-window per-IP limits |
+| `ratelimit.js` | Fixed-window per-IP limits (this machine itself is not limited) |
 | `db.js` | SQLite schema, write-through persistence, append-only audit log |
 | `anchor.js` | Merkle batching, anchoring and verification |
 
@@ -179,7 +183,7 @@ demo/
 
 Staff: Overview, LiveMap, SensorGrid, ZoneDetail, Incidents, CitizenReports, Broadcasts, Shelters,
 Planner, Rescue, Reservoirs, Relief, Accountability, Analytics, Audit, TimeMachine, Architecture,
-Settings. Public: Citizen, CheckIn, ReliefLedger.
+Settings. Public: Citizen, CheckIn, ReliefLedger, Trust (`/trust`).
 
 ---
 
@@ -190,7 +194,7 @@ Settings. Public: Citizen, CheckIn, ReliefLedger.
 - Node.js 22.5 or newer (uses the built-in `node:sqlite` module). Developed on Node 24.
 - Internet access for map tiles, live rainfall and road routes. The app still starts without it;
   routes fall back to straight lines.
-- Python 3.9+ only to rebuild the paper figures.
+- Python 3.9+ only to retrain the heavy-rain model or rebuild the paper figures.
 
 ### Start
 
@@ -215,10 +219,13 @@ with an offline banner.
 
 ### Resetting
 
-- Settings → Demo Data clears reports, incidents, broadcasts and rescues. The audit log and relief
-  records are kept on purpose.
+- Settings → Demo Data clears reports, incidents, broadcasts and rescues, resets thresholds and starts a
+  new relief round (the old round's totals are sealed as `relief_round_closed`). The audit log is kept.
+- A relief round runs 7 days from its first token. After that no token can be issued until a new round
+  is started by clearing demo data.
 - Deleting `demo/server/data/urbanpulse.db` starts from scratch (accounts are recreated on start).
-  Anchored batches stay on the blockchain.
+  Batches already anchored stay on the blockchain, and verification then reports them as missing.
+  Never run two copies of the server with the same keys and different databases.
 
 ---
 
@@ -267,8 +274,12 @@ officer or admin.
 
 ### 7.1 Monitoring and forecasting
 
-- **Overview**: KPIs (active incidents, residents at risk, open reports, people sheltered), map,
-  activity feed, live rainfall per zone, banner for incidents with no team assigned.
+- **Overview**: KPIs (active incidents, residents at risk, open reports, people sheltered), a
+  "Sealed on Shardeum" strip (records sealed, waiting, last seal, signing agencies; links to the trust
+  ledger), map, activity feed, live rainfall per zone, banner for incidents with no team assigned.
+- **Heavy-rain risk (XGBoost)**: Sensor Grid cards and Zone Detail show each zone's probability of
+  64.5 mm or more in the next 24 h, and whether it is above the model's alert line (Section 11.7).
+  It is advisory: it never opens incidents or sends alerts.
 - **Live Map**: zones, shelters and reports as layers. Clicking the map files a report or plans a
   road route to the best open shelter, steering around danger zones.
 - **Sensor Grid / Zone Detail**: measured history, 2-hour forecast with a 95% band, projected peak,
@@ -350,10 +361,15 @@ Modelled on the Rs 6,000 per ration card payment after Cyclone Michaung.
   (`RF-` + six characters). Asking again returns the same token.
 - Slots fill each shop's hourly rate (40 to 80 households an hour), earliest first, balancing the
   zone's two shops.
-- Shop staff record the payment after checking token, card and shop; each token is paid once.
+- Shop staff press **Check token** first: it shows the shop, slot (and whether now is before, in or
+  after it), paid or not, and whether the entered card and chosen shop match, without paying. Then
+  they record the payment; each token is paid once.
+- A round runs 7 days from its first token. Clearing demo data starts a new round and seals the old
+  round's totals (`relief_round_closed`).
 - Card numbers are never stored: each card is keyed by `HMAC-SHA256(pepper, normalised card)`.
-- The public ledger (`/relief/ledger`) shows per-shop and total counts and amounts. Every token and
-  payment is a sealed audit entry, so the total equals sealed payments × Rs 6,000.
+- The public ledger (`/relief-ledger`) shows per-shop and total counts and amounts for the current
+  round. Every token and payment is a sealed audit entry, so the round's total equals its sealed
+  payments × Rs 6,000.
 
 ### 7.9 Flood time machine
 
@@ -385,6 +401,11 @@ replay issues the Chembarambakkam release (29,000 cusecs) at its documented time
 - **Accountability**: one response timeline per incident (opened, alert, dispatch, evacuation order,
   cleared) built from audit entries, with each step's sealed status.
 - **Analytics**: current water level by zone and the city-wide level trend.
+- **Trust ledger** (`/trust`, public, also in the sidebar and linked from the citizen app): the
+  contract and both agency wallets with explorer links, records sealed and waiting, the latest seals
+  with their transactions, and a **Verify everything now** button anyone can press. It reports records
+  changed or deleted after sealing, and on-chain seals from our agencies that have no records on this
+  server.
 
 ---
 
@@ -415,10 +436,17 @@ Errors return `{ "error": "..." }` with 400 (bad input), 401 (not signed in), 40
 | POST | `/relief/token/lookup` | Look up a token by card | 20 / 10 min |
 | GET | `/relief/ledger` | Public relief totals | |
 | GET | `/alerts/verify/:code` | Check an alert code against the sealed record | 60 / min |
+| GET | `/public/chain` | Trust ledger: contract, agencies, totals, latest seals (database reads only) | |
+| POST | `/public/chain/verify` | Re-check every sealed record against the chain; summary only, one shared result for 30 s | 6 / min |
 | POST | `/sms/inbound` | Simulated SMS command | 30 / min |
 
 Caps checked in handlers: 2,000 vulnerable registrations per area and 20,000 in total; 500 open rescue
 requests; a citizen report with the same text in the same area within 10 minutes is rejected (409).
+
+Limits count per client address. The Vite proxy forwards each browser's address (`xfwd`) and the
+server trusts that header only from loopback (`trust proxy` = `loopback`), so other devices cannot
+spoof it. Requests from the server's own machine, such as the presenter's browser, are not limited.
+A limited request gets 429 with `Retry-After`, and the app shows the server's message.
 
 ### Staff (any signed-in user)
 
@@ -442,6 +470,7 @@ requests; a citizen report with the same text in the same area within 10 minutes
 | PATCH | `/boats/:id` | Update boat status |
 | POST | `/rescue/match` | Match free boats to requests (optimal or first-come) |
 | POST | `/rescue/:id/rescued` | Close a request, free the boat |
+| POST | `/relief/check` | Check a token without paying: slot, timing, paid status, card and shop match |
 | POST | `/relief/pay` | Record a relief payment |
 | GET | `/relief` | Staff relief view with slot loads |
 | GET | `/shelters/tokens` | Shelter check-in tokens and counts |
@@ -458,7 +487,7 @@ requests; a citizen report with the same text in the same area within 10 minutes
 | POST | `/simulate/storm` | Inject a storm into a zone |
 | PUT | `/sensors/:zoneId` | Take a sensor offline or online |
 | POST | `/broadcasts` | Send a manual alert |
-| POST | `/admin/clear-data` | Clear demo data (audit and relief kept) |
+| POST | `/admin/clear-data` | Clear demo data and start a new relief round (audit log kept) |
 | PUT | `/shelters/mode` | Simulated or live check-in occupancy |
 | POST | `/shelters/:id/token` | Rotate a shelter token |
 | GET | `/audit` | Audit log |
@@ -544,6 +573,24 @@ knee medium, waist and chest high.
 `schedule()` in `relief.js` fills each shop's hourly capacity earliest first and balances the two
 shops of a zone over a seven-day scheme starting on the IST date of the first token.
 
+### 11.7 Heavy-rain risk (XGBoost)
+
+Predicts the probability that the next 24 hours bring at least 64.5 mm of rain (IMD "heavy rain").
+
+- **Training** (`demo/ml/train.py`, Python): ERA5 hourly weather 2000–2024 from the Open-Meteo archive
+  for the 3 × 3 block of 0.25° cells around Chennai (all six zones are in the centre cell). Split by
+  year: train 2000–2016, validation 2017–2019, test 2020–2024. Depth (2, 3 or 4) chosen by validation
+  average precision, trees by early stopping; chosen depth 3, 171 trees. Alert line 8.1%, the best
+  F1 on validation.
+- **Features** (20, completed hours only, IST): rain over the last 1, 3, 6, 12, 24, 48 and 72 h, the
+  wettest hour of the last 24 h, sea-level pressure and its 3 h and 24 h change, humidity, cloud cover
+  now and over 6 h, wind as u/v, and time of year and day as sin/cos.
+- **Running in Node** (`heavyrain.js`): rebuilds the same features from the Open-Meteo forecast API's
+  past hours and walks the exported trees (XGBoost JSON), comparing in float32 as XGBoost does. A test
+  checks features and probabilities against Python on six fixture cases.
+- **Honest result**: logistic regression on the same features did as well or better on the test years
+  (Section 13). XGBoost was the pre-declared model and is kept; the test set was not used to choose.
+
 ---
 
 ## 12. Blockchain audit layer
@@ -617,6 +664,7 @@ each report before results. Values are mean ± 95% CI.
 | `priority.js --bed-scale 0.25 --out priority-stress` | Same, when beds are short | `priority-stress.md` |
 | `rescue.js` | Optimal vs first-come boat dispatch | `rescue.md` |
 | `relief.js` | Scheduled slots vs walk-in queues | `relief.md` |
+| `demo/ml/train.py` (Python) | Can past weather predict heavy rain in the next 24 h? | `xgboost.md` |
 | `fetch-routes.js` | One-time OSRM download for `routes.json` | |
 
 ### Headline results
@@ -641,6 +689,12 @@ each report before results. Values are mean ± 95% CI.
   110.7 min, medical-need wait from 132.2 to 73.7 min, and not-reached from 79.2% to 62.3%.
 - **Relief** (2,000 households, 2 shops): scheduled slots cut mean queue wait from 217.0 to 10.8 min
   and the longest queue from 658.5 to 21.4 people; first-visit service rises from 36.0% to 97.9%.
+- **Heavy-rain risk** (Chennai cell, test 2020–2024, 9 heavy-rain episodes): XGBoost ROC-AUC 0.989,
+  PR-AUC 0.312 (95% CI 0.186–0.458), all 9 episodes alerted, 14.6 false-alarm runs a year. Logistic
+  regression: PR-AUC 0.418 (0.276–0.568), 9 of 9 episodes, 9.0 false-alarm runs a year. Monthly
+  climatology 0.034 and persistence 0.059. Both learned models far outperform the simple baselines;
+  XGBoost does not beat logistic regression. The label is ERA5 rain, not IMD-observed rain, and no
+  comparison with a numerical weather forecast was made.
 
 Read each report's assumptions before quoting a number: several inputs (vulnerable share, shelter
 accessibility, report rates, shop rates, boat speeds) are assumptions, not measurements.
@@ -667,10 +721,12 @@ demo/figures/.venv/bin/python demo/figures/make_figures.py
 cd demo/server && npm test
 ```
 
-182 tests (`node --test`) cover the forecast, risk model, route scoring and detours, shelter
+188 tests (`node --test`) cover the forecast, the heavy-rain model (features and probabilities
+against Python), risk model, route scoring and detours, shelter
 assignment (against brute force), the group and priority planners, fusion, IMD rules, the simulator,
 storage and audit hashing, Merkle anchoring and verification, sign-in and roles, rate limits, rescue,
-vulnerable register, check-in, relief scheduling and HMAC keys, SMS commands and the time machine.
+vulnerable register, check-in, relief scheduling, token checks and HMAC keys, SMS commands and the
+time machine.
 
 Client lint: `cd demo/client && npm run lint`.
 
@@ -699,7 +755,7 @@ Client lint: `cd demo/client && npm run lint`.
 
 | Data | Source | Licence |
 |---|---|---|
-| Live and historical rainfall | Open-Meteo (Forecast API, Historical Weather API / ERA5) | CC BY 4.0 |
+| Live and historical rainfall and weather (pressure, humidity, cloud, wind) | Open-Meteo (Forecast API, Historical Weather API / ERA5) | CC BY 4.0 |
 | Road routes | OSRM public server on OpenStreetMap data | ODbL (OpenStreetMap) |
 | Map tiles | OpenStreetMap | ODbL |
 | GCC ward boundaries | DataMeet Municipal_Spatial_Data (Transparent Chennai) | CC BY-SA 2.5 India |
@@ -713,13 +769,18 @@ Client lint: `cd demo/client && npm run lint`.
 
 - Water-level sensors and the SMS gateway are simulated; shelters, accessibility, boats and ration
   shops are illustrative.
-- The forecast is a statistical stand-in, not a trained hydrological model.
+- The water-level forecast is a statistical stand-in, not a trained hydrological model.
+- The heavy-rain model learns ERA5 rain, which understates local extremes, and runs live on Open-Meteo
+  forecast-API inputs rather than ERA5. It does not beat logistic regression and was not compared with
+  a numerical weather forecast. It is advisory and never triggers alerts.
 - ERA5 reanalysis underestimates peak rainfall; documented flooding is day-resolution only.
 - Fusion is advisory; alerts are still driven by sensor levels.
 - Audit entries are protected only once anchored: the up-to-5-minute pending window is not.
 - Both agency keys live on one demo server; a real deployment needs a separate signer per agency.
   Whoever controls the server cannot rewrite anchored history but could anchor false new entries.
-- Rate limits are in memory, reset on restart, and see the Vite proxy as one IP in development.
+- Rate limits are in memory and reset on restart. Requests from the server's own machine are not
+  limited, which suits a presenter's laptop; a public deployment behind its own proxy must set
+  `trust proxy` for that proxy.
 - The relief lookup tells anyone whether a card holds a token; the demo cannot validate ration cards.
 - Shelter check-in tokens appear in URLs and can show up in access logs.
 - Vulnerable register, relief and shelter state each sit in a settings row: fine for a demo, not for
@@ -734,7 +795,10 @@ Client lint: `cd demo/client && npm run lint`.
 | Symptom | Cause and fix |
 |---|---|
 | `node:sqlite` not found | Node older than 22.5; upgrade |
-| Requests return 429 | Rate limit hit; wait for `Retry-After` or restart the server (limits are in memory) |
+| Requests return 429 | Rate limit hit from another device; wait for `Retry-After` or restart the server (limits are in memory). The server's own machine is never limited |
+| "This relief round has ended" | The 7-day round is over; clear demo data to start a new round |
+| Trust ledger or Verify shows "missing" transactions | Batches were sealed with your keys by another copy of the server (another laptop or database). They stay on the chain; use one database with one set of keys |
+| Heavy-rain risk not shown | `server/models/heavy-rain-xgb.json` missing, or fewer than 72 past hours from Open-Meteo |
 | Audit entries stay "pending" | No `SHARDEUM_PRIVATE_KEY`, or wallet out of test SHM; check the server log for "anchoring failed" |
 | Reservoir releases anchored by GCC, not WRD | `SHARDEUM_WRD_PRIVATE_KEY` unset, wallet not registered (`add-agency.js`) or unfunded |
 | Routes are straight lines | OSRM unreachable; check internet |
@@ -750,7 +814,7 @@ Client lint: `cd demo/client && npm run lint`.
 
 About 5 minutes, signed in as `admin`.
 
-1. **Overview**: six zones, live levels and rainfall, shelters.
+1. **Overview**: six zones, live levels and rainfall, shelters, and the "Sealed on Shardeum" strip.
 2. **Settings → Storm Simulator**: Velachery, intensity 50, trigger. Within seconds a toast, a red
    Incidents badge and the "no team assigned" banner appear.
 3. **Broadcasts**: the automated alert with its verification code and "why this alert?" reason.
@@ -759,8 +823,11 @@ About 5 minutes, signed in as `admin`.
 6. **Citizen app** (narrow window): pick Velachery, see "Flooding in your area" and the safe route;
    press Listen on the alert; paste the alert into "Got a forwarded flood message?" to see it verified.
 7. **Boat rescue**: request a boat from the citizen app, then match boats (optimal) in Boat Rescue.
-8. **Relief**: get a token in the citizen app, record the payment, open the public ledger.
+8. **Relief**: get a token in the citizen app; on the Relief page press **Check token** (slot, shop,
+   card match), then record the payment; open the public ledger.
 9. **Audit Log**: Anchor now, Verify on chain; then run `node chain/tamper-demo.js` and verify again
    to show the tampered row; `--undo` to restore.
 10. **Time Machine**: replay Michaung at speed 120 and watch alerts fire on real 2023 rainfall.
-11. **Architecture**: what is built (layers 6 to 9, parts of 2 and 3) and what is planned.
+11. **Zone Detail**: the XGBoost heavy-rain risk next to the rain forecast.
+12. **Trust ledger** (`/trust`): press **Verify everything now**.
+13. **Architecture**: the data flow, and what is built and planned in each layer.

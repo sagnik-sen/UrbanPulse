@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
@@ -88,6 +88,8 @@ export default function Overview() {
         </div>
       </section>
 
+      <ChainStrip />
+
       <section className="grid-2">
         <div className="panel map-card">
           <div className="panel-head">
@@ -151,5 +153,29 @@ export default function Overview() {
         </ResponsiveContainer>
       </section>
     </>
+  );
+}
+
+// blockchain status under the KPIs: how much of the record is sealed, how recently, and by whom
+function ChainStrip() {
+  const [chain, setChain] = useState(null);
+  useEffect(() => {
+    const load = () => fetch("/api/public/chain").then((r) => (r.ok ? r.json() : null)).then(setChain).catch(() => {});
+    load();
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, []);
+  if (!chain?.enabled) return null;
+  const { sealed, pending, batches } = chain.totals;
+  return (
+    <a href="/trust" className="panel chain-strip">
+      <span className="chain-dot" />
+      <strong>Sealed on Shardeum</strong>
+      <span>{sealed.toLocaleString("en-IN")} records sealed in {batches} transactions</span>
+      <span className="muted">{pending} waiting (sealed every 5 min)</span>
+      <span className="muted">{chain.lastAnchoredAt ? `last sealed ${timeAgo(chain.lastAnchoredAt)}` : "nothing sealed yet"}</span>
+      <span className="muted">{chain.agencies.map((a) => a.key.toUpperCase()).join(" + ") || "no signer"}</span>
+      <span className="link" style={{ marginLeft: "auto" }}>Trust ledger →</span>
+    </a>
   );
 }

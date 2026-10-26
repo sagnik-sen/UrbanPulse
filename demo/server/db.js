@@ -128,6 +128,10 @@ function openDb(file = path.join(DATA_DIR, "urbanpulse.db")) {
     anchorBatches() {
       return db.prepare("SELECT * FROM anchor_batches ORDER BY id").all();
     },
+    // totals for the public trust ledger: every audit entry, and how many are in an anchored batch
+    auditCounts() {
+      return db.prepare("SELECT (SELECT COUNT(*) FROM audit) AS entries, (SELECT COUNT(*) FROM audit_anchor) AS sealed").get();
+    },
     // the public record of an official alert, looked up by the code citizens see
     findAlert(code) {
       return db.prepare(`SELECT a.*, x.batch_id, b.tx_hash FROM audit a

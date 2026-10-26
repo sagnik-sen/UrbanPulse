@@ -51,7 +51,8 @@ Override the demo passwords with `UP_ADMIN_PASSWORD`, `UP_OFFICER_PASSWORD` and
 - **Citizen app** (`/citizen`, also linked from the sidebar): mobile-first public view with area status in plain language, the forecast, an automatic safe route when your area floods, official alerts, the report form and tap-to-call emergency numbers
 - **Live rainfall**: real per-zone rain on the Overview, an hourly 24 h rain chart on Zone Detail, a rain line on sensor cards and in the citizen app
 - **Audit Log** (admin): every staff action and sign-in attempt (thresholds, storms, dispatches, notes, report status, broadcasts, evacuation orders, rain link, failed/locked sign-ins), live, searchable, exportable as CSV. It is append-only, kept when demo data is cleared, and anchored to the Shardeum blockchain: **Anchor now** / **Verify on chain** show each entry as verified or tampered
-- **Analytics**, **Architecture** (9-layer diagram marking what runs in the demo and what is planned), **Settings** (live thresholds + Storm Simulator)
+- **Analytics**, **Architecture** (data-flow diagram and the 9 layers, each split into what runs in the demo and what is next), **Settings** (live thresholds + Storm Simulator)
+- **Trust Ledger** (`/trust`, public): what is sealed on the blockchain and by which agency, the latest seals with explorer links, and a **Verify everything now** button. The Overview shows the same status in a "Sealed on Shardeum" strip
 
 ## Demo script (about 3 minutes)
 
@@ -174,11 +175,26 @@ After Cyclone Michaung (December 2023), Tamil Nadu paid Rs 6,000 per ration card
 
 This demo does the same with scheduled slots, one payment per card, and a public ledger:
 
-- **Flow:** a citizen enters a ration card number and an area (`POST /api/relief/token`) and gets a token: a shop, a day and a one-hour slot (`RF-` plus six characters). `schedule()` in `server/relief.js` fills each shop's hours up to its rate (40 to 80 households an hour), earliest first, and balances the zone's two shops. Asking again returns the same token. Shop staff record the payment (`POST /api/relief/pay`) after checking the token, the card and the shop; each token is paid once.
+- **Flow:** a citizen enters a ration card number and an area (`POST /api/relief/token`) and gets a token: a shop, a day and a one-hour slot (`RF-` plus six characters). `schedule()` in `server/relief.js` fills each shop's hours up to its rate (40 to 80 households an hour), earliest first, and balances the zone's two shops. Asking again returns the same token. On the Relief page, shop staff press **Check token** (`POST /api/relief/check`) to see the token's shop and slot, whether it is paid, and whether the card and shop match, without paying. They then record the payment (`POST /api/relief/pay`); each token is paid once.
 - **Privacy:** the server never stores a card number. Each card is keyed by `HMAC-SHA256(pepper, card)` after stripping spaces and dashes and uppercasing. Audit entries hold only shop, zone, amount, slot and counts. The pepper comes from `RELIEF_PEPPER`, or is generated once and kept in the settings table. A real deployment keeps the pepper in a secrets manager, never next to the data: the pepper and the table together would let card numbers be brute-forced. Changing the pepper after tokens exist orphans every stored key.
 - **Ledger:** `GET /api/relief/ledger` is public and shows per-shop and total counts and amounts. Every token and payment is a sealed Audit Log entry (`relief_token_issued`, `relief_paid`), and the payment total equals the sealed payment entries times Rs 6,000. The staff view `GET /api/relief` adds slot loads.
-- **Known limits:** the shops and rates are illustrative, not surveyed. The lookup route (`POST /api/relief/token/lookup`) tells anyone whether a card holds a token; it is rate-limited per IP but is still an oracle. Anyone with a card number can get a token, because the demo cannot check ration cards. Payments are not checked against the slot time. The scheme's first day is the IST date of the first token, and it runs seven days. The state is one settings row, which suits a demo. Clearing demo data leaves relief records alone.
+- **Known limits:** the shops and rates are illustrative, not surveyed. The lookup route (`POST /api/relief/token/lookup`) tells anyone whether a card holds a token; it is rate-limited per IP but is still an oracle. Anyone with a card number can get a token, because the demo cannot check ration cards. Payments are not checked against the slot time. A round's first day is the IST date of its first token, and it runs seven days; after that, new tokens are refused with "This relief round has ended". Clearing demo data starts a new round and seals the old round's totals (`relief_round_closed`). The state is one settings row, which suits a demo.
 - **Evaluation:** `node experiments/relief.js` compares walk-in queues with scheduled slots over 200 seeds. See `experiments/results/relief.md`.
+
+## Heavy-rain risk (XGBoost)
+
+Sensor Grid and Zone Detail show each zone's chance of 64.5 mm or more (IMD "heavy rain") in the next 24 hours, from an XGBoost model trained on 25 years of real ERA5 weather around Chennai (`ml/train.py`). The server rebuilds the model's 20 features from the Open-Meteo forecast API's past 72 hours and walks the exported trees in `server/heavyrain.js`, so Node needs no ML library; `heavyrain.test.js` checks it against Python. It is advisory and never raises alerts.
+
+Retrain (about a minute after the download):
+
+```bash
+python3 -m venv demo/ml/.venv
+demo/ml/.venv/bin/pip install -r demo/ml/requirements.txt
+demo/ml/.venv/bin/python demo/ml/fetch_era5.py
+demo/ml/.venv/bin/python demo/ml/train.py
+```
+
+On macOS `train.py` uses the OpenMP library bundled with scikit-learn, so no Homebrew install is needed. Results, including the honest finding that logistic regression does as well, are in `server/experiments/results/xgboost.md`.
 
 ## Blockchain audit anchoring
 
@@ -314,6 +330,7 @@ Public routes (no sign-in) write data or cost a blockchain read, so each one has
 | `POST /api/sms/inbound` | 30 per min |
 | `GET /api/alerts/verify/:code` | 60 per min |
 | `GET /api/evacuation-route` | 30 per min |
+| `POST /api/public/chain/verify` | 6 per min |
 | `POST /api/shelters/:id/checkin`, `POST /api/shelters/:id/checkout` | 30 per 10 min, shared |
 | `POST /api/relief/token` | 10 per 10 min |
 | `POST /api/relief/token/lookup` | 20 per 10 min |
@@ -324,7 +341,7 @@ Caps that stop slower spam, checked in the handlers:
 - **Rescue requests:** 409 while 500 requests are open (status `open`, not yet assigned).
 - **Citizen reports:** 409 when the same text (case-insensitive, trimmed) was filed in the same area in the last 10 minutes.
 
-Limits are in memory: they reset on restart and are not shared between server processes. In development the Vite dev proxy makes every request come from one IP, so the limits apply to the proxy as a whole. A deployment behind a gateway should set `app.set("trust proxy", ...)` so that `req.ip` is the client.
+Limits are in memory: they reset on restart and are not shared between server processes. The Vite proxy forwards each browser's address and the server trusts it only from loopback, so every phone or laptop has its own allowance. Requests from the server's own machine (the presenter's browser) are not limited. A deployment behind another gateway must set `trust proxy` for that gateway.
 
 ## Talking points
 

@@ -36,6 +36,7 @@ export default function Layout() {
     { to: "/analytics", label: "Analytics" },
     { to: "/accountability", label: "Accountability" },
     { to: "/architecture", label: "Architecture" },
+    { to: "/trust", label: "Trust Ledger" },
     can.manage && { to: "/time-machine", label: "Time Machine" },
     can.manage && { to: "/audit", label: "Audit Log" },
     can.manage && { to: "/settings", label: "Settings" },

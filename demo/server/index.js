@@ -1161,6 +1161,43 @@ app.get("/api/audit/chain", requireRole("admin"), async (req, res) => {
   });
 });
 
+// Public trust ledger: what is sealed on the blockchain, by whom, and when. Database reads only.
+const publicVerifyLimit = rateLimit({ windowMs: 60_000, max: 6, name: "public-verify" });
+app.get("/api/public/chain", async (req, res) => {
+  const batches = db.anchorBatches();
+  const { entries, sealed } = db.auditCounts();
+  const agencies = chain.enabled ? await chain.agencies().catch(() => []) : [];
+  const keyOf = (address) => agencies.find((a) => a.address.toLowerCase() === String(address).toLowerCase())?.key ?? null;
+  const byAgency = {};
+  for (const b of batches) byAgency[b.agency] = (byAgency[b.agency] ?? 0) + 1;
+  res.json({
+    enabled: chain.enabled,
+    network: deployment?.network ?? null,
+    chainId: chain.chainId ?? deployment?.chainId ?? null,
+    contract: chain.address ?? deployment?.address ?? null,
+    explorer: deployment?.explorer ?? null,
+    agencies: agencies.map((a) => ({ ...a, batches: byAgency[a.address] ?? 0 })),
+    totals: { entries, sealed, pending: entries - sealed, batches: batches.length },
+    lastAnchoredAt: batches.length ? batches[batches.length - 1].anchored_at : null,
+    recent: batches.slice(-12).reverse().map((b) => ({ id: b.id, count: b.count, root: b.root, txHash: b.tx_hash, anchoredAt: b.anchored_at, agency: keyOf(b.agency) })),
+  });
+});
+
+// Public: re-check every sealed entry against the chain now. Summary only; one shared result for 30 s.
+let publicVerify = null;
+app.post("/api/public/chain/verify", publicVerifyLimit, async (req, res) => {
+  if (!chain.enabled) return res.status(503).json({ error: "No blockchain contract configured" });
+  try {
+    if (!publicVerify || Date.now() - publicVerify.checkedAt > 30_000) {
+      const v = await chain.verify();
+      publicVerify = { ok: v.ok, checkedAt: v.checkedAt, verified: v.verified, tampered: v.tampered, deleted: v.deleted.length, missing: v.missing.length, batches: v.batches.length, batchesIntact: v.batches.filter((b) => b.intact).length };
+    }
+    res.json(publicVerify);
+  } catch (err) {
+    chainError(res, err);
+  }
+});
+
 // Public: is this forwarded flood alert real? Answers from the anchored audit record, not the
 // broadcasts table, so it reflects exactly what was sealed (and survives clearing demo data).
 const ALERT_CODE = /^UP-[0-9A-F]{8}$/;

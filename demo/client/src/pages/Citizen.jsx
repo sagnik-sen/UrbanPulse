@@ -368,6 +368,7 @@ export default function Citizen() {
 
       <SmsDemo lang={lang} />
 
+      <p className="small c-foot"><a href="/trust">{t(lang, "trustLink")}</a></p>
       <p className="muted small c-foot">{t(lang, "foot")}</p>
       {lang === "ta" && <p className="muted small c-foot">{t(lang, "note.draft")}</p>}
 

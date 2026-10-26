@@ -1,5 +1,7 @@
 // Live rainfall for each zone from Open-Meteo (free, no API key). One request covers all zones.
 // https://open-meteo.com/en/docs
+const { heavyRainRisk, HISTORY } = require("./heavyrain");
+
 const API = "https://api.open-meteo.com/v1/forecast";
 const TIMEZONE = "Asia/Kolkata";
 const HOURS_AHEAD = 24;
@@ -9,10 +11,11 @@ function buildUrl(zones) {
     latitude: zones.map((z) => z.lat.toFixed(4)).join(","),
     longitude: zones.map((z) => z.lng.toFixed(4)).join(","),
     current: "precipitation",
-    hourly: "precipitation,precipitation_probability",
+    // the other variables and three past days feed the heavy-rain model (heavyrain.js)
+    hourly: "precipitation,precipitation_probability,pressure_msl,relative_humidity_2m,cloud_cover,wind_speed_10m,wind_direction_10m",
     timezone: TIMEZONE,
     forecast_days: "2",
-    past_days: "1",
+    past_days: String(Math.ceil(HISTORY / 24)),
   });
   return `${API}?${q}`;
 }
@@ -46,6 +49,8 @@ function parseRainfall(zones, body) {
       peakMmPerHr: peak.mm,
       peakAt: peak.time,
       hourly,
+      // the hour labelled "now" holds the rain of the hour just ended, so it is the last completed hour
+      heavyRainRisk: d.hourly ? heavyRainRisk(d.hourly, start) : null,
     };
   });
   return out;

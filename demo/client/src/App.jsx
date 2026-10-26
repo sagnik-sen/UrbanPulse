@@ -25,6 +25,7 @@ import Reservoirs from "./pages/Reservoirs";
 import TimeMachine from "./pages/TimeMachine";
 import Relief from "./pages/Relief";
 import ReliefLedger from "./pages/ReliefLedger";
+import Trust from "./pages/Trust";
 import "./App.css";
 
 export default function App() {
@@ -37,6 +38,7 @@ export default function App() {
             <Route path="citizen" element={<Citizen />} />
             <Route path="checkin/:shelterId" element={<CheckIn />} />
             <Route path="relief-ledger" element={<ReliefLedger />} />
+            <Route path="trust" element={<Trust />} />
             <Route element={<RequireAuth><Layout /></RequireAuth>}>
               <Route index element={<Overview />} />
               <Route path="map" element={<LiveMap />} />

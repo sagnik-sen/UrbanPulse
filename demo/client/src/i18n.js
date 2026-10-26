@@ -125,6 +125,7 @@ export const STRINGS = {
     "emergency.helpline": "GCC Flood Helpline",
     "emergency.emergency": "Emergency (Police / Fire / Ambulance)",
     "emergency.state": "TN State Disaster Control Room",
+    "trustLink": "Every official alert is sealed on the Shardeum blockchain. See the trust ledger",
     "foot": "Demo prototype. Water levels are simulated, not official data.",
   },
   ta: {
@@ -249,6 +250,7 @@ export const STRINGS = {
     "emergency.helpline": "GCC வெள்ள உதவி எண்",
     "emergency.emergency": "அவசர உதவி (காவல் / தீயணைப்பு / ஆம்புலன்ஸ்)",
     "emergency.state": "TN மாநில பேரிடர் கட்டுப்பாட்டு அறை",
+    "trustLink": "ஒவ்வொரு அதிகாரப்பூர்வ எச்சரிக்கையும் Shardeum பிளாக்செயினில் முத்திரையிடப்படுகிறது. நம்பிக்கைப் பதிவேட்டைப் பார்க்கவும்",
     "foot": "சோதனை முன்மாதிரி மட்டுமே. நீர் மட்டங்கள் உருவகப்படுத்தப்பட்டவை; அதிகாரப்பூர்வ தரவு அல்ல.",
   },
 };

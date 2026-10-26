@@ -70,6 +70,7 @@ export function RainChart({ zoneId }) {
             Now: <strong>{r.currentMmPerHr} mm/h</strong> ({rainLabel(r.currentMmPerHr).toLowerCase()}) · next 24 h total <strong>{r.next24hMm} mm</strong>
             {r.peakMmPerHr > 0 ? <> · heaviest {r.peakMmPerHr} mm/h at {hourLabel(r.peakAt)}</> : " · no rain expected"}
           </p>
+          <HeavyRainRisk risk={r.heavyRainRisk} />
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={r.hourly.map((h) => ({ ...h, label: hourLabel(h.time) }))} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
               <CartesianGrid stroke="#2c2c2a" vertical={false} />
@@ -93,5 +94,24 @@ export function RainLine({ zoneId }) {
   const { rainfall } = useFloodData();
   const r = rainfall?.zones?.[zoneId];
   if (!r) return null;
-  return <div className="muted small">🌧 {r.currentMmPerHr} mm/h now · {r.next24hMm} mm next 24 h</div>;
+  const risk = r.heavyRainRisk;
+  return (
+    <div className="muted small">
+      🌧 {r.currentMmPerHr} mm/h now · {r.next24hMm} mm next 24 h
+      {risk && <> · heavy-rain risk <strong style={{ color: risk.alert ? "#fab219" : undefined }}>{Math.round(risk.probability * 100)}%</strong></>}
+    </div>
+  );
+}
+
+// XGBoost heavy-rain model (server/heavyrain.js): advisory, shown beside the forecast, never raises alerts
+const pct = (p) => `${Math.round(p * 1000) / 10}%`;
+function HeavyRainRisk({ risk }) {
+  if (!risk) return null;
+  return (
+    <p className="small" style={{ margin: "0 0 10px" }}>
+      Heavy-rain risk (XGBoost):{" "}
+      <strong style={{ color: risk.alert ? "#fab219" : undefined }}>{pct(risk.probability)}</strong> chance of 64.5 mm or more in the next 24 h
+      <span className="muted"> · {risk.alert ? "above" : "below"} the model's alert line of {pct(risk.threshold)} · learned from 2000–2016 ERA5 weather, advisory only</span>
+    </p>
+  );
 }
