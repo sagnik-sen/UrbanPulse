@@ -159,3 +159,34 @@ test("summary: totals equal the paid tokens times Rs 6,000", () => {
   const booked = s.shops.flatMap((x) => x.slots).reduce((n, x) => n + x.booked, 0);
   assert.strictEqual(booked, 3);
 });
+
+test("checkToken: reports card, shop, timing and paid status without paying", () => {
+  const { checkToken } = require("./relief");
+  const state = emptyState();
+  const { token } = issueToken(state, { cardKey: KEY, zoneId: "velachery", now: MORNING });
+  assert.strictEqual(checkToken(state, { tokenCode: "RF-AAAAAA", now: MORNING }), null);
+  const otherShop = SHOPS.find((s) => s.zoneId === "velachery" && s.id !== token.shopId).id;
+  const bad = checkToken(state, { tokenCode: token.code.toLowerCase(), cardKey: cardKey(PEPPER, "999999999999"), shopId: otherShop, now: MORNING });
+  assert.strictEqual(bad.cardMatches, false);
+  assert.strictEqual(bad.shopMatches, false);
+  assert.strictEqual(bad.token.paid, false);
+  const unchecked = checkToken(state, { tokenCode: token.code, now: MORNING });
+  assert.strictEqual(unchecked.cardMatches, null);
+  assert.strictEqual(unchecked.shopMatches, null);
+  assert.strictEqual(state.tokens[KEY].paidAt, null, "checking never pays");
+  const slotStart = Date.parse(`${token.day}T${String(token.hour).padStart(2, "0")}:00:00+05:30`);
+  assert.strictEqual(checkToken(state, { tokenCode: token.code, now: slotStart - 1 }).timing, "early");
+  assert.strictEqual(checkToken(state, { tokenCode: token.code, now: slotStart + 60_000 }).timing, "on-time");
+  assert.strictEqual(checkToken(state, { tokenCode: token.code, now: slotStart + 3600_000 }).timing, "late");
+  pay(state, { tokenCode: token.code, cardKey: KEY, shopId: token.shopId, now: MORNING });
+  const paid = checkToken(state, { tokenCode: token.code, cardKey: KEY, shopId: token.shopId, now: MORNING });
+  assert.deepStrictEqual([paid.token.paid, paid.cardMatches, paid.shopMatches, paid.paidAt], [true, true, true, MORNING]);
+});
+
+test("issueToken: once the round's last slot has started, it says the round has ended", () => {
+  const state = emptyState();
+  issueToken(state, { cardKey: KEY, zoneId: "velachery", now: MORNING });
+  const later = MORNING + 30 * 864e5;
+  const out = issueToken(state, { cardKey: cardKey(PEPPER, "999999999999"), zoneId: "velachery", now: later });
+  assert.match(out.error, /round has ended/);
+});

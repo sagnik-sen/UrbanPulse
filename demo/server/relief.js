@@ -118,7 +118,8 @@ function issueToken(state, { cardKey: key, zoneId, now }) {
   if (existing) return { token: view(state, existing), issued: false };
   state.startDate ??= istDate(now);
   const from = firstOpenAt(state.startDate, now);
-  const [assigned] = from == null ? [null] : schedule([{ zoneId }], SHOPS, { booked: state.slots, from });
+  if (from == null) return { error: "This relief round has ended. Staff start a new round by clearing demo data." };
+  const [assigned] = schedule([{ zoneId }], SHOPS, { booked: state.slots, from });
   if (!assigned) return { error: "No collection slots are left in this area" };
   const shop = (state.slots[assigned.shopId] ??= {});
   shop[slotKey(assigned.day, assigned.hour)] = (shop[slotKey(assigned.day, assigned.hour)] ?? 0) + 1;
@@ -146,6 +147,24 @@ function pay(state, { tokenCode, cardKey: key, shopId, now }) {
   return { token: view(state, token), amountRs: AMOUNT_RS };
 }
 
+// staff check before paying: what the token says and whether this card and shop match, without paying.
+// Card and shop are optional; a missing one is reported as null. Slot timing is advisory, as in pay().
+function checkToken(state, { tokenCode, cardKey: key, shopId, now }) {
+  const code = String(tokenCode ?? "").trim().toUpperCase();
+  const entry = Object.entries(state.tokens).find(([, t]) => t.code === code);
+  if (!entry) return null;
+  const [owner, token] = entry;
+  const start = slotStartMs(state.startDate, token.day, token.hour);
+  const timing = now < start ? "early" : now < start + 3600_000 ? "on-time" : "late";
+  return {
+    token: view(state, token),
+    paidAt: token.paidAt,
+    cardMatches: key ? owner === key : null,
+    shopMatches: shopId ? token.shopId === shopId : null,
+    timing,
+  };
+}
+
 // totals and per-shop figures; slots are the booked counts per date and hour
 function summary(state) {
   const tokens = Object.values(state.tokens);
@@ -164,4 +183,4 @@ function summary(state) {
   return { amountRs: AMOUNT_RS, days: DAYS, startDate: state.startDate, totals: { issued: sum("issued"), paid: sum("paid"), amountRs: sum("amountRs") }, shops };
 }
 
-module.exports = { AMOUNT_RS, DAYS, SHOPS, collectionHours, normaliseCard, cardKey, newPepper, schedule, firstOpenAt, emptyState, issueToken, lookupToken, pay, summary, istDate, dateOf };
+module.exports = { AMOUNT_RS, DAYS, SHOPS, collectionHours, normaliseCard, cardKey, newPepper, schedule, firstOpenAt, emptyState, issueToken, lookupToken, checkToken, pay, summary, istDate, dateOf };

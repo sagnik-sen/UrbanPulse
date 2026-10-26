@@ -11,6 +11,7 @@ export default function Relief() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState("");
+  const [check, setCheck] = useState(null);
 
   const load = async () => {
     const res = await fetch("/api/relief");
@@ -39,6 +40,28 @@ export default function Relief() {
       setResult(`Paid ${money(body.amountRs)} for token ${body.code} at ${body.shop.name}.`);
       setForm({ ...EMPTY_FORM, shopId });
       await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // look a token up without paying; card and shop are optional and only compared when filled in
+  const checkToken = async () => {
+    setBusy(true);
+    setError("");
+    setResult("");
+    setCheck(null);
+    try {
+      const res = await fetch("/api/relief/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: form.code, cardNumber: form.cardNumber || undefined, shopId: form.shopId || undefined }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Could not check the token");
+      setCheck(body);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -106,11 +129,49 @@ export default function Relief() {
             <span className="field-label">Ration card number</span>
             <input className="input" value={form.cardNumber} onChange={(e) => setForm({ ...form, cardNumber: e.target.value })} autoComplete="off" required />
           </label>
-          <button className="btn" disabled={busy}>{busy ? "Recording…" : "Record payment"}</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="btn ghost" disabled={busy || !form.code.trim()} onClick={checkToken}>Check token</button>
+            <button className="btn" disabled={busy}>{busy ? "Working…" : "Record payment"}</button>
+          </div>
         </form>
+        {check && <TokenCheck check={check} />}
         {result && <p className="small" role="status" style={{ marginTop: 12 }}>{result}</p>}
         {error && <div className="form-error" role="alert" style={{ marginTop: 12 }}>{error}</div>}
       </section>
     </>
+  );
+}
+
+const TIMING = { early: "Before its slot", "on-time": "In its slot now", late: "After its slot" };
+
+const Badge = ({ ok, children }) => (
+  <span className="badge"><span className="badge-dot" style={{ background: ok ? "#0ca30c" : "#d03b3b" }} />{children}</span>
+);
+
+function Mark({ ok, yes, no, unset }) {
+  if (ok == null) return <span className="muted">{unset}</span>;
+  return <Badge ok={ok}>{ok ? yes : no}</Badge>;
+}
+
+function TokenCheck({ check }) {
+  const t = check.token;
+  const ready = !t.paid && check.cardMatches === true && check.shopMatches === true;
+  return (
+    <div className="panel" style={{ marginTop: 12, maxWidth: 480 }} role="status">
+      <div className="panel-head">
+        <h3 className="mono" style={{ margin: 0 }}>{t.code}</h3>
+        <Badge ok={!t.paid}>{t.paid ? "Already paid" : "Not paid yet"}</Badge>
+      </div>
+      <table className="table small">
+        <tbody>
+          <tr><td>Shop</td><td>{t.shopName} ({t.zone})</td></tr>
+          <tr><td>Slot</td><td>{t.day ?? "?"}, {t.hour}:00 to {t.hour + 1}:00 IST · {TIMING[check.timing]}</td></tr>
+          {t.paid && <tr><td>Paid at</td><td>{new Date(check.paidAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</td></tr>}
+          <tr><td>Ration card</td><td><Mark ok={check.cardMatches} yes="Matches this token" no="Different card" unset="Not entered" /></td></tr>
+          <tr><td>This shop</td><td><Mark ok={check.shopMatches} yes="Right shop" no="Wrong shop" unset="No shop chosen" /></td></tr>
+        </tbody>
+      </table>
+      <p className="small" style={{ margin: "8px 0 0" }}>{ready ? "Everything matches: safe to record the payment." : t.paid ? "Do not pay again." : "Fix the highlighted items before paying."}</p>
+    </div>
   );
 }

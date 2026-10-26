@@ -3,8 +3,9 @@ import { defineConfig } from 'vite'
 
 // same-origin in dev so the session cookie just works (no CORS credentials dance)
 const proxy = {
-  '/api': 'http://localhost:4000',
-  '/socket.io': { target: 'http://localhost:4000', ws: true },
+  // xfwd passes each browser's address on, so rate limits count per device, not per proxy
+  '/api': { target: 'http://localhost:4000', xfwd: true },
+  '/socket.io': { target: 'http://localhost:4000', ws: true, xfwd: true },
 }
 
 export default defineConfig({

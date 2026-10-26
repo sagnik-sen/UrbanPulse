@@ -30,6 +30,8 @@ try { process.loadEnvFile(path.join(__dirname, ".env")); } catch {}
 
 // served same-origin behind the Vite dev proxy, so no CORS: cross-site pages can't use the session cookie
 const app = express();
+// the Vite proxy runs on this machine: trust its X-Forwarded-For so req.ip is the real client
+app.set("trust proxy", "loopback");
 app.use(express.json());
 
 const server = http.createServer(app);
@@ -698,6 +700,17 @@ app.post("/api/relief/pay", requireRole(...RESPONDERS), (req, res) => {
   res.json({ code: result.token.code, shop: { name: shop.name, zone: reliefZoneName(shop.zoneId) }, amountRs: result.amountRs });
 });
 
+// shop staff check a token before paying: slot, shop, paid status and card match; changes nothing
+app.post("/api/relief/check", requireRole(...RESPONDERS), (req, res) => {
+  const card = req.body?.cardNumber;
+  const key = card ? relief.cardKey(reliefPepper, card) : null;
+  if (card && !key) return res.status(400).json({ error: "Enter the 10 to 16 character ration card number" });
+  const shopId = req.body?.shopId || null;
+  const result = relief.checkToken(reliefState, { tokenCode: req.body?.code, cardKey: key, shopId, now: Date.now() });
+  if (!result) return res.status(404).json({ error: "Token not found" });
+  res.json({ ...result, token: { ...result.token, zone: reliefZoneName(result.token.zoneId) } });
+});
+
 // staff view: totals and slot loads per shop
 app.get("/api/relief", requireRole(...RESPONDERS), (req, res) => {
   const s = relief.summary(reliefState);
@@ -729,6 +742,12 @@ app.post("/api/admin/clear-data", requireRole("admin"), (req, res) => {
   seedDemoBoats();
   thresholds = { ...DEFAULT_THRESHOLDS };
   db.setSetting("thresholds", thresholds);
+  // a relief round lasts relief.DAYS from its first token; clearing starts a new round, and the sealed
+  // entries of the old one stay in the audit log with this closing total
+  const closed = relief.summary(reliefState).totals;
+  Object.assign(reliefState, relief.emptyState());
+  saveRelief();
+  audit(req.user, "relief_round_closed", { issued: closed.issued, paid: closed.paid, amountRs: closed.amountRs });
   io.emit("data-cleared", { thresholds });
   toStaff("rescue-reset", { boats });
   audit(req.user, "demo_data_cleared");

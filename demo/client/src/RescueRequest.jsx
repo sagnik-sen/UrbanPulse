@@ -151,7 +151,7 @@ export default function RescueRequest({ lang, area, coords }) {
       storeId(r.id);
       setActive({ id: r.id, status: r.status, boatName: null });
     } catch (err) {
-      setError(err.status === 400 ? err.message : tr(lang, "error"));
+      setError([400, 409, 429].includes(err.status) ? err.message : tr(lang, "error"));
     } finally {
       setSending(false);
     }

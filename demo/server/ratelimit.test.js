@@ -70,3 +70,13 @@ test("the map stays bounded: past 10,000 keys the oldest windows are dropped", (
   // ip-0 was the oldest and was evicted, so it starts again with a full allowance
   assert.strictEqual(hit(mw, "ip-0").passed, true);
 });
+
+test("requests from this machine are never limited; other addresses are", () => {
+  _reset();
+  const mw = rateLimit({ windowMs: 60_000, max: 1, name: "e", now: () => 0 });
+  for (const ip of ["127.0.0.1", "::1", "::ffff:127.0.0.1"]) {
+    for (let i = 0; i < 5; i++) assert.strictEqual(hit(mw, ip).passed, true);
+  }
+  assert.strictEqual(hit(mw, "192.168.1.20").passed, true);
+  assert.strictEqual(hit(mw, "192.168.1.20").passed, false);
+});

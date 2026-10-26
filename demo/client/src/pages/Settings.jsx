@@ -91,7 +91,7 @@ function DemoData() {
   const clear = async () => {
     await clearDemoData();
     setConfirming(false);
-    pushToast({ kind: "info", title: "Demo data cleared", text: "Reports, incidents and broadcasts removed; thresholds reset" });
+    pushToast({ kind: "info", title: "Demo data cleared", text: "Reports, incidents, broadcasts and rescues removed; thresholds reset; new relief round started" });
   };
 
   return (

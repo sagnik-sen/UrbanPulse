@@ -1,8 +1,9 @@
 // Fixed-window request limiter, per client IP, held in memory. Counts reset on restart and are not
 // shared between processes, which is enough for one demo server.
-// Behind the Vite dev proxy every request arrives from the same IP, so in dev these limits apply to
-// the proxy as a whole. A deployment behind a gateway sets app.set("trust proxy", ...) so req.ip is the client.
+// index.js trusts X-Forwarded-For from loopback (the Vite proxy), so req.ip is the real client.
+// Requests from this machine itself (the presenter's own browser) are not limited; every other device is.
 const MAX_KEYS = 10_000;
+const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 const stores = new Set();
 
 function rateLimit({ windowMs, max, name = "limit", now = Date.now }) {
@@ -12,6 +13,7 @@ function rateLimit({ windowMs, max, name = "limit", now = Date.now }) {
   stores.add(windows);
 
   return function limiter(req, res, next) {
+    if (LOOPBACK.has(req.ip)) return next();
     const t = now();
     for (const [key, w] of windows) {
       if (t - w.start < windowMs) break;
