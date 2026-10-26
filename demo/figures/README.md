@@ -26,13 +26,19 @@ node experiments/relief.js
 node experiments/priority.js --bed-scale 0.25 --out priority-stress
 ```
 
+and the heavy-rain model from the repository root (see `demo/README.md` for the one-time ERA5 download):
+
+```
+demo/ml/.venv/bin/python demo/ml/train.py
+```
+
 Then build the figures from the repository root:
 
 ```
 demo/figures/.venv/bin/python demo/figures/make_figures.py
 ```
 
-This writes 18 files to `demo/figures/out/`: each figure as PDF and as 300-dpi PNG.
+This writes 20 files to `demo/figures/out/`: each figure as PDF and as 300-dpi PNG.
 The `.venv` directory is git-ignored.
 
 ## Figures
@@ -48,6 +54,8 @@ The `.venv` directory is git-ignored.
 | `fig_rescue` | Volunteer boat rescue (single column): (a) mean, p90 and medical-need mean wait to a boat (min); (b) % of requests not reached within 6 h; greedy first-come vs optimal batch, mean ± 95% CI over 200 seeds. | `rescue.js` → `results/rescue.csv`, checked against `results/rescue.md` |
 | `fig_relief` | Flood relief collection (single column): (a) mean and p90 queue wait (min); (b) max queue length at any shop (people); walk-in vs scheduled slots, mean ± 95% CI over 200 seeds. | `relief.js` → `results/relief.csv`, checked against `results/relief.md` |
 | `fig_priority` | Bed scarcity stress run (single column): % of vulnerable and general residents without a bed, everyone equal vs vulnerable first, mean ± 95% CI over 1,600 scenario runs. Shelter capacity × 0.25. | `priority.js --bed-scale 0.25 --out priority-stress` → `results/priority-stress.csv`, checked against `results/priority-stress.md` |
+
+| `fig_xgboost` | Heavy-rain risk models, Chennai cell, test years 2020–2024 (single column): (a) PR-AUC with 95% bootstrap CI over days; (b) false-alarm runs per year, labelled with heavy-rain episodes hit (of 9). Climatology, persistence, logistic regression and XGBoost. | `demo/ml/train.py` → `results/xgboost.csv`, checked against `results/xgboost.md` |
 
 ## Notes
 

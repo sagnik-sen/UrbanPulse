@@ -81,7 +81,7 @@ export default function Relief() {
         <div className="kpi"><div className="kpi-label">Amount paid</div><div className="kpi-value">{money(data.totals.amountRs)}</div></div>
       </section>
 
-      <section className="panel">
+      <section className="panel" style={{ overflowX: "auto" }}>
         <div className="panel-head">
           <h2>Shops and slot loads</h2>
           <span className="muted small">Tokens booked per hour, summed over {data.days} collection days</span>

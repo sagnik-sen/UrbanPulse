@@ -614,6 +614,61 @@ def fig_priority():
     save(fig, "fig_priority")
 
 
+# ---------------------------------------------------------------------------------------------
+# Figure 10: heavy-rain risk models, Chennai cell, test years 2020-2024 (demo/ml/train.py)
+# ---------------------------------------------------------------------------------------------
+# (model name as in xgboost.md / xgboost.csv, short label, colour, hatch)
+XGB_MODELS = [
+    ("Climatology (month)", "Climatology", "white", "..."),
+    ("Persistence (last 24 h heavy)", "Persistence", GREY, "//"),
+    ("Logistic regression", "Logistic\nregression", SKY, None),
+    ("XGBoost (proposed)", "XGBoost", BLUE, None),
+]
+
+
+def parse_ci(cell):
+    """'0.312 (0.186–0.458)' -> (0.312, 0.186, 0.458)"""
+    m, rest = cell.split(" (")
+    lo, hi = rest.rstrip(")").split("–")
+    return float(m), float(lo), float(hi)
+
+
+def fig_xgboost():
+    md = {r[0]: r for r in md_rows("xgboost.md", "## Test results, Chennai cell (2020–2024)")}
+    csv_rows = {r["model"]: r for r in read_rows("xgboost.csv") if r["eval"] == "Chennai cell"}
+    assert list(md) == [m for m, *_ in XGB_MODELS], "xgboost.md model rows changed"
+    pr, fa, hits = [], [], []
+    for name, *_ in XGB_MODELS:
+        m, lo, hi = parse_ci(md[name][2])
+        assert_close(round(float(csv_rows[name]["pr_auc"]), 3), m, 1e-3, f"xgboost {name} PR-AUC")
+        pr.append((m, lo, hi))
+        f = float(md[name][7])
+        assert_close(round(float(csv_rows[name]["false_alarm_runs_per_year"]), 1), f, 0.05, f"xgboost {name} false alarms")
+        fa.append(f)
+        hits.append(md[name][6].replace(" of ", "/"))
+
+    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(SINGLE_W, 2.5), layout="constrained")
+    xs = range(len(XGB_MODELS))
+    for x, (_, label, color, hatch), (m, lo, hi) in zip(xs, XGB_MODELS, pr):
+        ax_a.bar(x, m, width=0.7, color=color, hatch=hatch, edgecolor=BLACK, linewidth=0.5,
+                 yerr=[[m - lo], [hi - m]], ecolor=BLACK, error_kw={"elinewidth": 0.6, "capsize": 1.5})
+        ax_a.annotate(f"{m:.2f}", xy=(x, hi), xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=6.5)
+    ax_a.set_ylabel("PR-AUC (95% CI)")
+    ax_a.set_ylim(0, 0.7)
+    ax_a.set_title("(a)", fontsize=8, loc="left")
+    for x, (_, label, color, hatch), f, h in zip(xs, XGB_MODELS, fa, hits):
+        ax_b.bar(x, f, width=0.7, color=color, hatch=hatch, edgecolor=BLACK, linewidth=0.5)
+        ax_b.annotate(f"{f:.1f}\n({h})", xy=(x, f), xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=6)
+    ax_b.set_ylabel("False-alarm runs per year")
+    ax_b.set_ylim(0, 22)
+    ax_b.set_title("(b) label: episodes hit", fontsize=8, loc="left")
+    for ax in (ax_a, ax_b):
+        ax.set_xticks(list(xs))
+        ax.set_xticklabels([label for _, label, *_ in XGB_MODELS], rotation=35, ha="right")
+        grid(ax, "y")
+    save(fig, "fig_xgboost")
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     fig_evacuation()
@@ -625,9 +680,10 @@ def main():
     fig_rescue()
     fig_relief()
     fig_priority()
+    fig_xgboost()
     names = [
         "fig_evacuation", "fig_fusion", "fig_replay_michaung", "fig_tamper", "fig_scale", "fig_chain_latency",
-        "fig_rescue", "fig_relief", "fig_priority",
+        "fig_rescue", "fig_relief", "fig_priority", "fig_xgboost",
     ]
     files = [OUT / f"{n}.{ext}" for n in names for ext in ("pdf", "png")]
     missing = [str(p) for p in files if not p.exists()]

@@ -703,7 +703,7 @@ accessibility, report rates, shop rates, boat speeds) are assumptions, not measu
 
 ## 14. Paper figures
 
-`demo/figures/make_figures.py` draws 9 figures (PDF and 300-dpi PNG in `demo/figures/out/`) from the
+`demo/figures/make_figures.py` draws 10 figures (PDF and 300-dpi PNG in `demo/figures/out/`) from the
 experiment CSVs and cross-checks them against the Markdown reports. Setup and the full list are in
 `demo/figures/README.md`:
 
