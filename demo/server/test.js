@@ -323,6 +323,13 @@ test("rainfall feed keeps the last good reading when a refresh fails", async () 
   assert.equal(feed.get().zones.a.currentMmPerHr, 2, "old reading kept");
 });
 
+test("a network failure reports its cause, not just \"fetch failed\"", async () => {
+  const fetchImpl = async () => { throw new TypeError("fetch failed", { cause: Object.assign(new Error("getaddrinfo ENOTFOUND api.open-meteo.com"), { code: "ENOTFOUND" }) }); };
+  const feed = createRainfallFeed(rainZones, { fetchImpl });
+  await feed.refresh();
+  assert.equal(feed.get().error, "fetch failed (ENOTFOUND)");
+});
+
 test("audit log is newest-first, filterable, append-only, and survives clearing demo data", () => {
   const db = openDb(":memory:");
   for (let i = 1; i <= 5; i++) db.logAudit({ id: `e${i}`, ts: i, username: "admin", role: "admin", action: i % 2 ? "login" : "broadcast_sent", details: { n: i } });

@@ -72,11 +72,13 @@ function createRainfallFeed(zones, { fetchImpl = fetch, now = Date.now } = {}) {
     get: () => state,
     async refresh() {
       try {
-        const res = await fetchImpl(buildUrl(zones), { signal: AbortSignal.timeout(8000) });
+        const res = await fetchImpl(buildUrl(zones), { signal: AbortSignal.timeout(20000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         state = { updatedAt: now(), source: "Open-Meteo", stale: false, error: null, zones: parseRainfall(zones, await res.json()) };
       } catch (err) {
-        state = { ...state, stale: true, error: err.message };
+        // Node reports network failures as "fetch failed"; the cause says why (DNS, refused, timeout)
+        const cause = err.cause?.code || err.cause?.message;
+        state = { ...state, stale: true, error: cause ? `${err.message} (${cause})` : err.message };
       }
       return state;
     },

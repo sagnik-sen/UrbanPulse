@@ -347,9 +347,15 @@ function rainfallView() {
   const state = replay ? replay.rainfall() : rainfall.get(); // during a replay the clients see the replayed rain
   return { ...state, zones: withCategories(state.zones) };
 }
+let rainRetry = null;
 async function refreshRainfall() {
   const state = await rainfall.refresh();
-  if (state.error) console.warn(`rainfall refresh failed: ${state.error}`);
+  if (state.error) {
+    console.warn(`rainfall refresh failed: ${state.error}`);
+    // a failed fetch (network blip, slow Wi-Fi) is retried in a minute instead of waiting for the next 10-minute refresh
+    clearTimeout(rainRetry);
+    rainRetry = setTimeout(refreshRainfall, 60_000);
+  }
   if (!state.stale && !replay) {
     const imd = imdAlerts(db.getSetting("imdAlertState", {}), LOCATIONS, state, Date.now());
     db.setSetting("imdAlertState", imd.state);
