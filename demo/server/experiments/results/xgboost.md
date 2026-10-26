@@ -85,3 +85,6 @@ Start is the first issue hour whose next 24 hours reach 64.5 mm. Lead: hours fro
 - In the live app the features come from the Open-Meteo forecast API's past hours (a model analysis), not ERA5, so live inputs differ somewhat from training inputs.
 - No comparison with a numerical weather forecast was made (see the script header). The app's existing IMD alerts use the Open-Meteo 24 h forecast; this model is shown alongside them as advisory and does not trigger alerts.
 - All nine training cells are within about 40 km of each other, so they are not independent samples.
+- The most important feature is rain in the last 6 hours, and several episodes were first alerted after they began. Part of the episode hit rate comes from rain already falling: this is a nowcast of a heavy-rain day, not a long-lead early warning.
+- The lead column searches from 48 hours before an episode, so an alert from an earlier, unrelated wet spell can appear as a long lead (for example a low peak probability with a large negative lead).
+- Logistic regression on the same features matched or beat XGBoost on the test years. XGBoost was the pre-declared model and is kept in the app; the test set was not used to choose between them.

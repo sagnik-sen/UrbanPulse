@@ -100,7 +100,7 @@ def load_cell(path):
     n = len(h["time"])
     prec = np.array([nz(x) for x in h["precipitation"]])
     ahead = np.convolve(np.nan_to_num(prec), np.ones(HORIZON), "full")  # ahead[j] = sum prec[j-23..j]
-    rows, labels, years, days, months = [], [], [], [], []
+    rows, labels, years, days, months, times = [], [], [], [], [], []
     for i in range(HISTORY - 1, n - HORIZON):
         window = prec[i + 1 : i + 1 + HORIZON]
         if np.isnan(window).any():
@@ -113,9 +113,10 @@ def load_cell(path):
         years.append(int(h["time"][i][:4]))
         days.append(h["time"][i][:10])
         months.append(int(h["time"][i][5:7]))
+        times.append(h["time"][i])
     return h, {
         "X": np.array(rows), "y": np.array(labels, dtype=int), "year": np.array(years),
-        "day": np.array(days), "month": np.array(months), "time": [h["time"][i] for i in range(HISTORY - 1, n - HORIZON)],
+        "day": np.array(days), "month": np.array(months), "time": times,
     }
 
 
@@ -330,6 +331,9 @@ def write_report(counts, grid, depth, n_trees, rows, ep_rows, imp, thr, secs):
     L.append("- In the live app the features come from the Open-Meteo forecast API's past hours (a model analysis), not ERA5, so live inputs differ somewhat from training inputs.")
     L.append("- No comparison with a numerical weather forecast was made (see the script header). The app's existing IMD alerts use the Open-Meteo 24 h forecast; this model is shown alongside them as advisory and does not trigger alerts.")
     L.append("- All nine training cells are within about 40 km of each other, so they are not independent samples.")
+    L.append("- The most important feature is rain in the last 6 hours, and several episodes were first alerted after they began. Part of the episode hit rate comes from rain already falling: this is a nowcast of a heavy-rain day, not a long-lead early warning.")
+    L.append("- The lead column searches from 48 hours before an episode, so an alert from an earlier, unrelated wet spell can appear as a long lead (for example a low peak probability with a large negative lead).")
+    L.append("- Logistic regression on the same features matched or beat XGBoost on the test years. XGBoost was the pre-declared model and is kept in the app; the test set was not used to choose between them.")
     (RESULTS / "xgboost.md").write_text("\n".join(L) + "\n")
 
 

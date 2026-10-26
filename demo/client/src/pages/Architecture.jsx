@@ -16,7 +16,7 @@ const LAYERS = [
   {
     n: 6, title: "Forecasting & Planning",
     built: [
-      "XGBoost heavy-rain model trained on 25 years of real ERA5 weather",
+      "XGBoost heavy-rain model on real ERA5 weather (trained 2000–2016, tested 2020–2024)",
       "Damped-trend water-level forecast with 95% band",
       "IMD 24-hour rainfall rules",
       "Sensor + citizen-report fusion with reporter trust",

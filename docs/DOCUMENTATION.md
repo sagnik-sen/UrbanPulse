@@ -70,7 +70,7 @@ UrbanPulse is a working prototype of the application side of a city flood system
 | SMS gateway | Simulated (no message leaves the server) |
 | Shelters, accessibility, boats, ration shops | Illustrative, not surveyed |
 | Water-level forecast | Damped-trend exponential smoothing (stand-in for a trained model) |
-| Heavy-rain risk model | Real: XGBoost trained on 25 years of ERA5 weather; live inputs from Open-Meteo |
+| Heavy-rain risk model | Real: XGBoost on ERA5 weather (trained 2000–2016, tested 2020–2024); live inputs from Open-Meteo |
 
 The system is a prototype for six Chennai zones: Pallikaranai Marshland, Velachery, OMR
 (Sholinganallur), T Nagar, Adyar and Mylapore. The scale benchmark runs the same code on all 200 GCC

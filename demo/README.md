@@ -183,7 +183,7 @@ This demo does the same with scheduled slots, one payment per card, and a public
 
 ## Heavy-rain risk (XGBoost)
 
-Sensor Grid and Zone Detail show each zone's chance of 64.5 mm or more (IMD "heavy rain") in the next 24 hours, from an XGBoost model trained on 25 years of real ERA5 weather around Chennai (`ml/train.py`). The server rebuilds the model's 20 features from the Open-Meteo forecast API's past 72 hours and walks the exported trees in `server/heavyrain.js`, so Node needs no ML library; `heavyrain.test.js` checks it against Python. It is advisory and never raises alerts.
+Sensor Grid and Zone Detail show each zone's chance of 64.5 mm or more (IMD "heavy rain") in the next 24 hours, from an XGBoost model built on 25 years of real ERA5 weather around Chennai: trained on 2000–2016, validated on 2017–2019 and tested on 2020–2024 (`ml/train.py`). The server rebuilds the model's 20 features from the Open-Meteo forecast API's past 72 hours and walks the exported trees in `server/heavyrain.js`, so Node needs no ML library; `heavyrain.test.js` checks it against Python. It is advisory and never raises alerts.
 
 Retrain (about a minute after the download):
 
