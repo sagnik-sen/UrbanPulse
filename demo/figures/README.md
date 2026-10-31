@@ -57,6 +57,8 @@ The `.venv` directory is git-ignored.
 
 | `fig_xgboost` | Heavy-rain risk models, Chennai cell, test years 2020–2024 (single column): (a) PR-AUC with 95% bootstrap CI over days; (b) false-alarm runs per year, labelled with heavy-rain episodes hit (of 9). Climatology, persistence, logistic regression, XGBoost and Random Forest. | `demo/ml/train.py` → `results/xgboost.csv`, checked against `results/xgboost.md` |
 
+Paper Fig. 1 (runtime architecture) is drawn separately: `demo/figures/.venv/bin/python demo/figures/architecture.py` writes `out/fig_architecture.pdf` and `.png`.
+
 ## Notes
 
 - `fig_priority` uses the bed-scale stress variant only. At the default scale beds almost never run out (0.00 to 0.01% without a bed under either policy), so the effect is not visible there; see `results/priority.md`.
