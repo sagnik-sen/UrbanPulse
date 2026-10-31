@@ -621,8 +621,9 @@ def fig_priority():
 XGB_MODELS = [
     ("Climatology (month)", "Climatology", "white", "..."),
     ("Persistence (last 24 h heavy)", "Persistence", GREY, "//"),
-    ("Logistic regression", "Logistic\nregression", SKY, None),
+    ("Logistic regression", "Logistic reg.", SKY, None),
     ("XGBoost (proposed)", "XGBoost", BLUE, None),
+    ("Random Forest", "Random forest", GREEN, "xx"),
 ]
 
 
@@ -647,7 +648,7 @@ def fig_xgboost():
         fa.append(f)
         hits.append(md[name][6].replace(" of ", "/"))
 
-    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(SINGLE_W, 2.5), layout="constrained")
+    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(SINGLE_W, 2.6), layout="constrained")
     xs = range(len(XGB_MODELS))
     for x, (_, label, color, hatch), (m, lo, hi) in zip(xs, XGB_MODELS, pr):
         ax_a.bar(x, m, width=0.7, color=color, hatch=hatch, edgecolor=BLACK, linewidth=0.5,
@@ -664,7 +665,7 @@ def fig_xgboost():
     ax_b.set_title("(b) label: episodes hit", fontsize=8, loc="left")
     for ax in (ax_a, ax_b):
         ax.set_xticks(list(xs))
-        ax.set_xticklabels([label for _, label, *_ in XGB_MODELS], rotation=35, ha="right")
+        ax.set_xticklabels([label for _, label, *_ in XGB_MODELS], rotation=40, ha="right", rotation_mode="anchor")
         grid(ax, "y")
     save(fig, "fig_xgboost")
 

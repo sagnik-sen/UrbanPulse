@@ -19,6 +19,10 @@ Pre-declared before any result was seen (do not tune after looking at the test y
   The depth is chosen by validation average precision. Alert threshold: the one with the best F1 on validation.
 - Baselines on the same rows: monthly climatology, persistence (P(heavy next 24 h | last 24 h heavy)), and
   logistic regression on the same features.
+- Random Forest (added 2026-10-31 at the faculty's request, after the first test results had been seen; its
+  settings below were fixed before it was run on the test years): 300 trees, max_features sqrt, min_samples_leaf 20,
+  each tree on a 25% bootstrap sample, seed 7; max_depth in {8, 12, 16} chosen by validation average precision.
+  It is evaluated last so the earlier models' numbers and bootstrap draws are unchanged.
 - Intervals: 95% bootstrap over IST days (1,000 resamples), because neighbouring hours share 23 of 24 label hours.
 - No comparison with numerical weather prediction was made: Open-Meteo's historical forecast archive joins the
   first hours of successive model runs, so it is not a 24-hour-ahead forecast.
@@ -45,6 +49,7 @@ import time
 
 import numpy as np
 import xgboost as xgb
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
 from sklearn.preprocessing import StandardScaler
@@ -61,6 +66,7 @@ HORIZON = 24
 CENTRE = (13.0, 80.25)
 TRAIN, VAL, TEST = range(2000, 2017), range(2017, 2020), range(2020, 2025)
 DEPTHS = [2, 3, 4]
+RF_DEPTHS = [8, 12, 16]
 SEED = 7
 BOOT = 1000
 
@@ -220,12 +226,23 @@ def main():
     depth, n_trees, _, model = max(grid, key=lambda g: g[2])
     booster = model.get_booster()[: n_trees]
 
+    # Random Forest: depth by validation average precision, like XGBoost
+    rf_grid = []
+    for d in RF_DEPTHS:
+        f = RandomForestClassifier(n_estimators=300, max_depth=d, max_features="sqrt", min_samples_leaf=20, max_samples=0.25, n_jobs=-1, random_state=SEED)
+        f.fit(tr["X"], tr["y"])
+        ap = average_precision_score(va["y"], f.predict_proba(va["X"])[:, 1])
+        rf_grid.append((d, ap, f))
+        print(f"random forest depth {d}: validation AP {ap:.4f}")
+    rf_depth, _, forest = max(rf_grid, key=lambda g: g[1])
+
     def predictors():
         return {
             "Climatology (month)": lambda d: np.array([clim[m] for m in d["month"]]),
             "Persistence (last 24 h heavy)": lambda d: np.where(d["X"][:, 4] >= HEAVY_MM, pers[True], pers[False]),
             "Logistic regression": lambda d: logreg.predict_proba(scaler.transform(d["X"]))[:, 1],
             "XGBoost (proposed)": lambda d: booster.predict(xgb.DMatrix(d["X"])),
+            "Random Forest": lambda d: forest.predict_proba(d["X"])[:, 1],
         }
 
     rng = np.random.default_rng(SEED)
@@ -278,7 +295,7 @@ def main():
     imp = booster.get_score(importance_type="gain")
     imp = sorted(((FEATURES[int(k[1:])], v) for k, v in imp.items()), key=lambda kv: -kv[1])
 
-    write_report(counts, grid, depth, n_trees, rows, ep_rows, imp, thr, time.time() - t0)
+    write_report(counts, grid, depth, n_trees, rows, ep_rows, imp, thr, time.time() - t0, rf_grid, rf_depth)
     write_csv(rows)
 
 
@@ -286,7 +303,7 @@ def fmt_ci(v, ci):
     return f"{v:.3f} ({ci[0]:.3f}–{ci[1]:.3f})" if ci else f"{v:.3f}"
 
 
-def write_report(counts, grid, depth, n_trees, rows, ep_rows, imp, thr, secs):
+def write_report(counts, grid, depth, n_trees, rows, ep_rows, imp, thr, secs, rf_grid, rf_depth):
     L = []
     L.append("# Heavy-rain risk model (XGBoost)\n")
     L.append("Predicts the probability that the next 24 hours bring at least 64.5 mm of rain (IMD \"heavy rain\") in an ERA5 cell, from the weather up to now.")
@@ -303,6 +320,11 @@ def write_report(counts, grid, depth, n_trees, rows, ep_rows, imp, thr, secs):
     for d, n, ap, _ in grid:
         L.append(f"| {d} | {n} | {ap:.4f} |")
     L.append(f"\nChosen: max_depth {depth}, {n_trees} trees. Alert threshold {thr:.3f} (best F1 on validation).\n")
+    L.append("Random Forest (300 trees):\n")
+    L.append("| max_depth | Validation average precision |\n|---:|---:|")
+    for d, ap, _ in rf_grid:
+        L.append(f"| {d} | {ap:.4f} |")
+    L.append(f"\nChosen: max_depth {rf_depth}.\n")
     L.append("## Test results, Chennai cell (2020–2024)\n")
     L.append("ROC-AUC, PR-AUC and Brier with 95% bootstrap intervals over days. Thresholds were fixed on validation. Episode hit: at least one hour of the episode at or above the threshold. False-alarm runs: runs of alert hours that overlap no positive hour.\n")
     L.append("| Model | ROC-AUC | PR-AUC | Brier | Precision | Recall (hours) | Episodes hit | False-alarm runs / year |\n|---|---:|---:|---:|---:|---:|---:|---:|")
@@ -333,7 +355,7 @@ def write_report(counts, grid, depth, n_trees, rows, ep_rows, imp, thr, secs):
     L.append("- All nine training cells are within about 40 km of each other, so they are not independent samples.")
     L.append("- The most important feature is rain in the last 6 hours, and several episodes were first alerted after they began. Part of the episode hit rate comes from rain already falling: this is a nowcast of a heavy-rain day, not a long-lead early warning.")
     L.append("- The lead column searches from 48 hours before an episode, so an alert from an earlier, unrelated wet spell can appear as a long lead (for example a low peak probability with a large negative lead).")
-    L.append("- Logistic regression on the same features matched or beat XGBoost on the test years. XGBoost was the pre-declared model and is kept in the app; the test set was not used to choose between them.")
+    L.append("- Logistic regression and Random Forest on the same features both matched or beat XGBoost on the test years (Random Forest had the fewest false alarms). XGBoost was the pre-declared model and is kept in the app; the test set was not used to choose between them.")
     (RESULTS / "xgboost.md").write_text("\n".join(L) + "\n")
 
 

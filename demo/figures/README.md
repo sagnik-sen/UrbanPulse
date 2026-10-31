@@ -55,7 +55,7 @@ The `.venv` directory is git-ignored.
 | `fig_relief` | Flood relief collection (single column): (a) mean and p90 queue wait (min); (b) max queue length at any shop (people); walk-in vs scheduled slots, mean ± 95% CI over 200 seeds. | `relief.js` → `results/relief.csv`, checked against `results/relief.md` |
 | `fig_priority` | Bed scarcity stress run (single column): % of vulnerable and general residents without a bed, everyone equal vs vulnerable first, mean ± 95% CI over 1,600 scenario runs. Shelter capacity × 0.25. | `priority.js --bed-scale 0.25 --out priority-stress` → `results/priority-stress.csv`, checked against `results/priority-stress.md` |
 
-| `fig_xgboost` | Heavy-rain risk models, Chennai cell, test years 2020–2024 (single column): (a) PR-AUC with 95% bootstrap CI over days; (b) false-alarm runs per year, labelled with heavy-rain episodes hit (of 9). Climatology, persistence, logistic regression and XGBoost. | `demo/ml/train.py` → `results/xgboost.csv`, checked against `results/xgboost.md` |
+| `fig_xgboost` | Heavy-rain risk models, Chennai cell, test years 2020–2024 (single column): (a) PR-AUC with 95% bootstrap CI over days; (b) false-alarm runs per year, labelled with heavy-rain episodes hit (of 9). Climatology, persistence, logistic regression, XGBoost and Random Forest. | `demo/ml/train.py` → `results/xgboost.csv`, checked against `results/xgboost.md` |
 
 ## Notes
 

@@ -588,8 +588,12 @@ Predicts the probability that the next 24 hours bring at least 64.5 mm of rain (
 - **Running in Node** (`heavyrain.js`): rebuilds the same features from the Open-Meteo forecast API's
   past hours and walks the exported trees (XGBoost JSON), comparing in float32 as XGBoost does. A test
   checks features and probabilities against Python on six fixture cases.
-- **Honest result**: logistic regression on the same features did as well or better on the test years
-  (Section 13). XGBoost was the pre-declared model and is kept; the test set was not used to choose.
+- **Comparison models** (same rows, features, split and threshold rule): monthly climatology,
+  persistence, logistic regression, and a Random Forest (300 trees, depth 8, 12 or 16 chosen on
+  validation; added at the faculty's request, its settings fixed before it saw the test years).
+- **Honest result**: logistic regression and Random Forest both did as well as or better than XGBoost on
+  the test years (Section 13). XGBoost was the pre-declared model and is kept in the app; the test set
+  was not used to choose.
 
 ---
 
@@ -664,7 +668,7 @@ each report before results. Values are mean ± 95% CI.
 | `priority.js --bed-scale 0.25 --out priority-stress` | Same, when beds are short | `priority-stress.md` |
 | `rescue.js` | Optimal vs first-come boat dispatch | `rescue.md` |
 | `relief.js` | Scheduled slots vs walk-in queues | `relief.md` |
-| `demo/ml/train.py` (Python) | Can past weather predict heavy rain in the next 24 h? | `xgboost.md` |
+| `demo/ml/train.py` (Python) | Can past weather predict heavy rain in the next 24 h? XGBoost vs Random Forest, logistic regression and two baselines | `xgboost.md` |
 | `fetch-routes.js` | One-time OSRM download for `routes.json` | |
 
 ### Headline results
@@ -691,9 +695,10 @@ each report before results. Values are mean ± 95% CI.
   and the longest queue from 658.5 to 21.4 people; first-visit service rises from 36.0% to 97.9%.
 - **Heavy-rain risk** (Chennai cell, test 2020–2024, 9 heavy-rain episodes): XGBoost ROC-AUC 0.989,
   PR-AUC 0.312 (95% CI 0.186–0.458), all 9 episodes alerted, 14.6 false-alarm runs a year. Logistic
-  regression: PR-AUC 0.418 (0.276–0.568), 9 of 9 episodes, 9.0 false-alarm runs a year. Monthly
-  climatology 0.034 and persistence 0.059. Both learned models far outperform the simple baselines;
-  XGBoost does not beat logistic regression. The label is ERA5 rain, not IMD-observed rain, and no
+  regression: PR-AUC 0.418 (0.276–0.568), 9 of 9 episodes, 9.0 false-alarm runs a year. Random Forest:
+  PR-AUC 0.411 (0.270–0.574), 9 of 9 episodes, 8.0 false-alarm runs a year (the fewest of the learned
+  models). Monthly climatology 0.034 and persistence 0.059. All three learned models far outperform
+  the simple baselines; their confidence intervals overlap, and XGBoost does not beat the other two. The label is ERA5 rain, not IMD-observed rain, and no
   comparison with a numerical weather forecast was made.
 
 Read each report's assumptions before quoting a number: several inputs (vulnerable share, shelter
@@ -771,7 +776,7 @@ Client lint: `cd demo/client && npm run lint`.
   shops are illustrative.
 - The water-level forecast is a statistical stand-in, not a trained hydrological model.
 - The heavy-rain model learns ERA5 rain, which understates local extremes, and runs live on Open-Meteo
-  forecast-API inputs rather than ERA5. It does not beat logistic regression and was not compared with
+  forecast-API inputs rather than ERA5. It does not beat logistic regression or Random Forest and was not compared with
   a numerical weather forecast. It is advisory and never triggers alerts.
 - ERA5 reanalysis underestimates peak rainfall; documented flooding is day-resolution only.
 - Fusion is advisory; alerts are still driven by sensor levels.

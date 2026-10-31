@@ -194,7 +194,7 @@ demo/ml/.venv/bin/python demo/ml/fetch_era5.py
 demo/ml/.venv/bin/python demo/ml/train.py
 ```
 
-On macOS `train.py` uses the OpenMP library bundled with scikit-learn, so no Homebrew install is needed. Results, including the honest finding that logistic regression does as well, are in `server/experiments/results/xgboost.md`.
+On macOS `train.py` uses the OpenMP library bundled with scikit-learn, so no Homebrew install is needed. Results, including the comparison with Random Forest and logistic regression (both do as well as or better than XGBoost), are in `server/experiments/results/xgboost.md`.
 
 ## Blockchain audit anchoring
 

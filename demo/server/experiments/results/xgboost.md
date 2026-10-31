@@ -2,7 +2,7 @@
 
 Predicts the probability that the next 24 hours bring at least 64.5 mm of rain (IMD "heavy rain") in an ERA5 cell, from the weather up to now.
 Data: Open-Meteo Historical Weather API, ERA5 reanalysis (models=era5), CC BY 4.0 (https://open-meteo.com/), hourly 2000–2024, the 3 × 3 block of 0.25° cells around Chennai. All six demo zones are in the Chennai cell (13.0 N, 80.25 E).
-Script: `demo/ml/train.py` (design pre-declared in its header). xgboost 3.4.1. Runtime 51 s.
+Script: `demo/ml/train.py` (design pre-declared in its header). xgboost 3.4.1. Runtime 260 s.
 
 ## Labels and splits
 
@@ -28,6 +28,16 @@ Train 2000–2016, validation 2017–2019, test 2020–2024. Events before 2020,
 
 Chosen: max_depth 3, 171 trees. Alert threshold 0.081 (best F1 on validation).
 
+Random Forest (300 trees):
+
+| max_depth | Validation average precision |
+|---:|---:|
+| 8 | 0.1587 |
+| 12 | 0.1615 |
+| 16 | 0.1524 |
+
+Chosen: max_depth 12.
+
 ## Test results, Chennai cell (2020–2024)
 
 ROC-AUC, PR-AUC and Brier with 95% bootstrap intervals over days. Thresholds were fixed on validation. Episode hit: at least one hour of the episode at or above the threshold. False-alarm runs: runs of alert hours that overlap no positive hour.
@@ -38,6 +48,7 @@ ROC-AUC, PR-AUC and Brier with 95% bootstrap intervals over days. Thresholds wer
 | Persistence (last 24 h heavy) | 0.614 (0.529–0.722) | 0.059 (0.008–0.170) | 0.006 (0.003–0.009) | 0.233 | 0.233 | 5 of 9 | 0.8 |
 | Logistic regression | 0.993 (0.988–0.996) | 0.418 (0.276–0.568) | 0.005 (0.003–0.007) | 0.379 | 0.744 | 9 of 9 | 9.0 |
 | XGBoost (proposed) | 0.989 (0.981–0.995) | 0.312 (0.186–0.458) | 0.005 (0.003–0.008) | 0.315 | 0.635 | 9 of 9 | 14.6 |
+| Random Forest | 0.990 (0.980–0.996) | 0.411 (0.270–0.574) | 0.004 (0.003–0.007) | 0.410 | 0.624 | 9 of 9 | 8.0 |
 
 ## Test results, all nine cells (secondary)
 
@@ -47,6 +58,7 @@ ROC-AUC, PR-AUC and Brier with 95% bootstrap intervals over days. Thresholds wer
 | Persistence (last 24 h heavy) | 0.594 | 0.041 | 0.0054 | 0.192 | 0.192 | 45 of 88 | 1.0 |
 | Logistic regression | 0.991 | 0.384 | 0.0045 | 0.355 | 0.705 | 80 of 88 | 8.8 |
 | XGBoost (proposed) | 0.989 | 0.285 | 0.0048 | 0.296 | 0.599 | 77 of 88 | 14.0 |
+| Random Forest | 0.988 | 0.383 | 0.0042 | 0.393 | 0.556 | 75 of 88 | 7.0 |
 
 ## Test episodes, Chennai cell
 
@@ -87,4 +99,4 @@ Start is the first issue hour whose next 24 hours reach 64.5 mm. Lead: hours fro
 - All nine training cells are within about 40 km of each other, so they are not independent samples.
 - The most important feature is rain in the last 6 hours, and several episodes were first alerted after they began. Part of the episode hit rate comes from rain already falling: this is a nowcast of a heavy-rain day, not a long-lead early warning.
 - The lead column searches from 48 hours before an episode, so an alert from an earlier, unrelated wet spell can appear as a long lead (for example a low peak probability with a large negative lead).
-- Logistic regression on the same features matched or beat XGBoost on the test years. XGBoost was the pre-declared model and is kept in the app; the test set was not used to choose between them.
+- Logistic regression and Random Forest on the same features both matched or beat XGBoost on the test years (Random Forest had the fewest false alarms). XGBoost was the pre-declared model and is kept in the app; the test set was not used to choose between them.
