@@ -1,7 +1,7 @@
 # UrbanPulse Chennai: Technical Documentation
 
 Smart flood monitoring and response system for Chennai.
-BCSE355L Design of Smart Cities, VIT Chennai. Team: Sagnik Sen and Ayush Gupta. Faculty: Dr. Suseela S.
+BCSE316L Design of Smart Cities, VIT Chennai. Team: Sagnik Sen and Ayush Gupta. Faculty: Dr. Suseela S.
 
 This document is the single reference for the project: what it does, how it is built, how to run and
 configure it, every API route, the algorithms, the blockchain layer, the experiments and their results,
